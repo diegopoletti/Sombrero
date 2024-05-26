@@ -149,7 +149,7 @@ void reproducirAudio(const char *ruta) {
   mp3->begin(fuente, salida); // Inicia la reproducción del audio
   yaReprodujo = true;         // Marca que ya se está reproduciendo un audio
 }
-----------------------------------------------------------------------------------Verificación Touch---------------------------------
+//----------------------------------------------------------------------------------Verificación Touch---------------------------------
 void verificarRespuestaTouch() {
   // Revisa si se ha tocado el sensor de touch "Sí"
   if (touchRead(TOUCH_PIN_SI) < 30) { // Ajusta este umbral según sea necesario
@@ -169,7 +169,7 @@ void verificarRespuestaTouch() {
     delay(300);                    // Agrega un pequeño retraso para evitar lecturas múltiples
   }
 }
------------------------------------------------------------------------------------- Calculo de REsultado Final--------------------
+//------------------------------------------------------------------------------------ Calculo de REsultado Final--------------------
 const char *obtenerResultadoFinal() {
   if (puntaje <= 10) {
     return "/result4.mp3"; // Ruta del archivo de resultado para puntajes de 0 a 10
