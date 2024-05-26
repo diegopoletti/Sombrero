@@ -8,11 +8,11 @@ const char *version = "2.78";
 #include <WiFi.h>
 #include <ArduinoOTA.h>
 
-bool OTAhabilitado = true; // variable que se utilizara para inabilitar la función OTA si no se pudo lograr la conexion WIFI
+bool OTAhabilitado = false; // variable que se utilizara para inabilitar la función OTA si no se pudo lograr la conexion WIFI
 
 // Configuración de la red WiFi
-const char *ssid = "DPP";          // Nombre de la red WiFi
-const char *password = "monigote"; // Contraseña de la red WiFi
+const char *ssid = "";          // Nombre de la red WiFi
+const char *password = ""; // Contraseña de la red WiFi
 
 // Pines del Bus SPI para la conexión de la Tarjeta SD.
 #define SCK 18  // Clock desde Micro a SD.
