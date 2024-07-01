@@ -1,4 +1,5 @@
-const char *version = "2.80"; // Versión del programa
+const char *version = "3.00"; // Versión del programa 
+//se realiza cambio a verificación por pulsadores estandard.
 #include "AudioFileSourceSD.h"   // Biblioteca para fuente de audio desde la tarjeta SD
 #include "AudioGeneratorMP3.h"   // Biblioteca para generar audio MP3
 #include "AudioOutputI2SNoDAC.h" // Biblioteca para salida de audio sin DAC
@@ -8,11 +9,11 @@ const char *version = "2.80"; // Versión del programa
 #include <WiFi.h>                // Biblioteca para WiFi
 #include <ArduinoOTA.h>          // Biblioteca para actualizaciones OTA
 
-bool OTAhabilitado = true; // Variable para habilitar/deshabilitar OTA
+bool OTAhabilitado = false; // Variable para habilitar/deshabilitar OTA
 
 // Configuración de la red WiFi
-const char *ssid = "DPP";       // Nombre de la red WiFi
-const char *password = "monigote"; // Contraseña de la red WiFi
+const char *ssid = "";       // Nombre de la red WiFi
+const char *password = ""; // Contraseña de la red WiFi
 
 // Pines del Bus SPI para la conexión de la Tarjeta SD
 #define SCK 18   // Pin de reloj para SPI
@@ -24,6 +25,13 @@ const char *password = "monigote"; // Contraseña de la red WiFi
 #define TOUCH_PIN_SI T0       // GPIO 4 - Pin touch para "Sí"
 #define TOUCH_PIN_NO T3       // GPIO 15 - Pin touch para "No"
 bool touchPresionado = true; // Bandera para verificar si se presionó algún botón Touch
+
+// Variables para el estado de los pulsadores y manejo del debounce
+bool pulsadorSiPresionado = false; // Variable para el estado del pulsador "Sí"
+bool pulsadorNoPresionado = false; // Variable para el estado del pulsador "No"
+unsigned long ultimoTiempoSi = 0;  // Tiempo de la última lectura del pulsador "Sí"
+unsigned long ultimoTiempoNo = 0;  // Tiempo de la última lectura del pulsador "No"
+const unsigned long debounceDelay = 120; // Tiempo de espera para el debounce en milisegundos
 
 #define PWM_PIN 12 // GPIO 12 - Pin para la salida PWM
 
@@ -50,7 +58,11 @@ void setup() {
     Serial.println("Tarjeta SD no encontrada"); // Mensaje de error si no se encuentra la tarjeta SD
     return; // Termina la configuración si no se encuentra la tarjeta SD
   }
-
+ // Configuración de los pines de los pulsadores como entradas
+  pinMode(PIN_SI, INPUT);
+  pinMode(PIN_NO, INPUT);
+  
+  //crea insatancias para el manejo de MP3, Salida de Audio y SD
   mp3 = new AudioGeneratorMP3();      // Crea una instancia del generador de audio MP3
   salida = new AudioOutputI2SNoDAC(); // Crea una instancia de la salida de audio sin DAC
   fuente = new AudioFileSourceSD();   // Crea una instancia de la fuente de audio desde la tarjeta SD
@@ -166,21 +178,48 @@ void reproducirAudio(const char *ruta) {
 }
 //----------------------------------------------------------------------------------Verificación Touch---------------------------------
 void verificarRespuestaTouch() {
-  if (touchRead(TOUCH_PIN_SI) < 30) { // Verifica si se presionó el sensor touch "Sí"
+  // 27-06-24 se decide cambiar a pulsadores estandar ya que el cableado puede ser largo y generar problemas con el sistema de pulsado touch
+  /*// Revisa si se ha tocado el sensor de touch "Sí"
+  if (touchRead(TOUCH_PIN_SI) < 30) { // Ajusta este umbral según sea necesario
     Serial.println("Touch 'Sí' presionado");
-    touchPresionado = true; // Marca que se presionó un botón touch
-    puntajeTotal += puntosRespuesta[preguntaActual]; // Suma los puntos de la respuesta "Sí" al puntaje total
-    preguntaActual++; // Avanza a la siguiente pregunta
-    delay(300); // Agrega un pequeño retraso para evitar lecturas múltiples
+    touchPresionado = true;
+    puntaje += puntosRespuesta[0]; // Suma los puntos de la respuesta "Sí" al puntaje
+    preguntaActual++;              // Avanza a la siguiente pregunta
+    delay(300);                    // Agrega un pequeño retraso para evitar lecturas múltiples
   }
 
-  if (touchRead(TOUCH_PIN_NO) < 30) { // Verifica si se presionó el sensor touch "No"
+  // Revisa si se ha tocado el sensor de touch "No"
+  if (touchRead(TOUCH_PIN_NO) < 30) { // Ajusta este umbral según sea necesario
     Serial.println("Touch 'No' presionado");
-    touchPresionado = true; // Marca que se presionó un botón touch
-    preguntaActual++; // Avanza a la siguiente pregunta
-    delay(300); // Agrega un pequeño retraso para evitar lecturas múltiples
+    touchPresionado = true;
+    puntaje += puntosRespuesta[1]; // Suma los puntos de la respuesta "No" al puntaje
+    preguntaActual++;              // Avanza a la siguiente pregunta
+    delay(300);                    // Agrega un pequeño retraso para evitar lecturas múltiples
   }
- 
+}*/
+  unsigned long tiempoActual = millis(); // Obtener el tiempo actual
+
+  // Revisa si se ha presionado el pulsador "Sí" y maneja el debounce
+  if (digitalRead(PIN_SI) == HIGH) { // Verifica si el pulsador "Sí" está presionado
+    if ((tiempoActual - ultimoTiempoSi) > debounceDelay) { // Verifica si ha pasado el tiempo del debounce
+      Serial.println("Pulsador 'Sí' presionado");
+      pulsadorSiPresionado = true; // Marca el pulsador "Sí" como presionado
+      puntaje += puntosRespuesta[0]; // Suma los puntos de la respuesta "Sí" al puntaje
+      preguntaActual++;              // Avanza a la siguiente pregunta
+      ultimoTiempoSi = tiempoActual; // Actualiza el tiempo de la última lectura del pulsador "Sí"
+    }
+  }
+
+  // Revisa si se ha presionado el pulsador "No" y maneja el debounce
+  if (digitalRead(PIN_NO) == HIGH) { // Verifica si el pulsador "No" está presionado
+    if ((tiempoActual - ultimoTiempoNo) > debounceDelay) { // Verifica si ha pasado el tiempo del debounce
+      Serial.println("Pulsador 'No' presionado");
+      pulsadorNoPresionado = true; // Marca el pulsador "No" como presionado
+      puntaje += puntosRespuesta[1]; // Suma los puntos de la respuesta "No" al puntaje
+      preguntaActual++;              // Avanza a la siguiente pregunta
+      ultimoTiempoNo = tiempoActual; // Actualiza el tiempo de la última lectura del pulsador "No"
+    }
+  }
 }
 //------------------------------------------------------------------------------------ Calculo de REsultado Final--------------------
 const char *obtenerResultadoFinal() {
