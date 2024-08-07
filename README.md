@@ -65,7 +65,7 @@ El código está escrito en C++ para la plataforma ESP32 y utiliza varias biblio
    - Salida de audio -> GPIO 12
 
 ## Diagrama de Conexiones
-
+![image](https://github.com/user-attachments/assets/9d7e7700-d046-4db9-811e-4e0fd3a52e68)
 
 
 ## Configuración y Uso
