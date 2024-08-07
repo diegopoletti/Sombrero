@@ -87,3 +87,7 @@ Las contribuciones a este proyecto son bienvenidas. Por favor, abre un issue par
  # Sombrero 4.00
  // Se realizo agregado de servomotores para cuspide y boca del sombrero.
  // se cambio logica de pulsadores para funcionar con nivel activo en bajo.
+ # Sombrero 4.1
+ // cambiar la logica de las preguntas haciendo que simen la misma cantidad de puntaje, llegado a un empate reproducir aleatoriamente uno de los dos perfiles, si se dan tres empates o mas , reproducir indesiso 
+ // agrgar  3 pwm  de salida  para colocar una tira de led RGB  que cambie de color sefun la casa. Rojo( grifindor) verde ( sliderin) blue ( reuvenclo )  Amarrillo ( hofulpof) 50% rojo 50% verde 
+ 
