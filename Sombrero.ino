@@ -1,5 +1,6 @@
-const char *version = "3.00"; // Versión del programa 
-//se realiza cambio a verificación por pulsadores estandard.
+// Versión del programa
+const char *version = "4.00"; 
+
 #include "AudioFileSourceSD.h"   // Biblioteca para fuente de audio desde la tarjeta SD
 #include "AudioGeneratorMP3.h"   // Biblioteca para generar audio MP3
 #include "AudioOutputI2SNoDAC.h" // Biblioteca para salida de audio sin DAC
@@ -8,12 +9,13 @@ const char *version = "3.00"; // Versión del programa
 #include "SPI.h"                 // Biblioteca para interfaz SPI
 #include <WiFi.h>                // Biblioteca para WiFi
 #include <ArduinoOTA.h>          // Biblioteca para actualizaciones OTA
+#include <ESP32Servo.h>          // Biblioteca para controlar servomotores en ESP32
 
 bool OTAhabilitado = false; // Variable para habilitar/deshabilitar OTA
 
-// Configuración de la red WiFi
+// Variables de configuración WiFi
 const char *ssid = "";       // Nombre de la red WiFi
-const char *password = ""; // Contraseña de la red WiFi
+const char *password = "";   // Contraseña de la red WiFi
 
 // Pines del Bus SPI para la conexión de la Tarjeta SD
 #define SCK 18   // Pin de reloj para SPI
@@ -21,10 +23,13 @@ const char *password = ""; // Contraseña de la red WiFi
 #define MOSI 23  // Pin de entrada de datos para SPI
 #define CS 5     // Pin de selección de chip para SPI
 
-// Pines touch para respuestas
-#define TOUCH_PIN_SI T0       // GPIO 4 - Pin touch para "Sí"
-#define TOUCH_PIN_NO T3       // GPIO 15 - Pin touch para "No"
-bool touchPresionado = true; // Bandera para verificar si se presionó algún botón Touch
+// Pines de los pulsadores (botones)
+#define PIN_SI 12  // GPIO para el pulsador "Sí"
+#define PIN_NO 13  // GPIO para el pulsador "No"
+
+// Pines de los servomotores
+#define PIN_SERVO_CUSPIDE 14 // GPIO para el servomotor "cuspide"
+#define PIN_SERVO_BOCA 15    // GPIO para el servomotor "boca"
 
 // Variables para el estado de los pulsadores y manejo del debounce
 bool pulsadorSiPresionado = false; // Variable para el estado del pulsador "Sí"
@@ -32,8 +37,6 @@ bool pulsadorNoPresionado = false; // Variable para el estado del pulsador "No"
 unsigned long ultimoTiempoSi = 0;  // Tiempo de la última lectura del pulsador "Sí"
 unsigned long ultimoTiempoNo = 0;  // Tiempo de la última lectura del pulsador "No"
 const unsigned long debounceDelay = 120; // Tiempo de espera para el debounce en milisegundos
-
-#define PWM_PIN 12 // GPIO 12 - Pin para la salida PWM
 
 // Variables para el manejo del audio
 AudioGeneratorMP3 *mp3;       // Generador de audio MP3
@@ -49,26 +52,41 @@ const int totalPreguntas = 8;                                                   
 const int puntosRespuesta[8] = {10, 20, 30, 40, 50, 60, 70, 80};                                                     // Puntuación de cada pregunta
 const char *archivosPreguntas[totalPreguntas] = {"q1.mp3", "q2.mp3", "q3.mp3", "q4.mp3", "q5.mp3", "q6.mp3", "q7.mp3", "q8.mp3"}; // Archivos de audio para las preguntas
 unsigned long ultimoUso = 0;                                                                                         // Variable para rastrear el último uso
+bool touchPresionado = false; // Bandera para verificar si se presionó algún botón
+// Variables para control de servomotores
+Servo servoCuspide; // Instancia del servomotor "cuspide"
+Servo servoBoca;    // Instancia del servomotor "boca"
 
 //--------------------------------------------------------------------------SETUP--------------------------------------------------------------------------
 void setup() {
   Serial.begin(115200); // Inicializa la comunicación serial a 115200 baudios
   Serial.println(version); // Imprime la versión del programa
+  
+  // Inicializa la tarjeta SD
   if (!SD.begin(CS)) { // Inicializa la tarjeta SD conectada al pin de selección CS
     Serial.println("Tarjeta SD no encontrada"); // Mensaje de error si no se encuentra la tarjeta SD
     return; // Termina la configuración si no se encuentra la tarjeta SD
   }
- // Configuración de los pines de los pulsadores como entradas
-  pinMode(PIN_SI, INPUT);
-  pinMode(PIN_NO, INPUT);
-  
-  //crea insatancias para el manejo de MP3, Salida de Audio y SD
+
+  // Configuración de los pines de los pulsadores como entradas
+  pinMode(PIN_SI, INPUT_PULLUP); // Configura el pin del pulsador "Sí" como entrada con resistencia pull-up
+  pinMode(PIN_NO, INPUT_PULLUP); // Configura el pin del pulsador "No" como entrada con resistencia pull-up
+  // Inicializa los servomotores
+  ESP32PWM::allocateTimer(0); // Asigna un temporizador para el uso del PWM en el ESP32
+  ESP32PWM::allocateTimer(1); // Asigna un segundo temporizador para el uso del PWM en el ESP32
+  servoCuspide.setPeriodHertz(50); // Configura el servomotor "cuspide" a 50 Hz
+  servoBoca.setPeriodHertz(50);    // Configura el servomotor "boca" a 50 Hz
+  servoCuspide.attach(PIN_SERVO_CUSPIDE, 500, 2400); // Asocia el servomotor "cuspide" a su pin con ancho de pulso
+  servoBoca.attach(PIN_SERVO_BOCA, 500, 2400);       // Asocia el servomotor "boca" a su pin con ancho de pulso
+  // Inicializa los servomotores en su posición central
+  servoCuspide.write(90);
+  servoBoca.write(0);  
+  // Crea instancias para el manejo de MP3, Salida de Audio y SD
   mp3 = new AudioGeneratorMP3();      // Crea una instancia del generador de audio MP3
   salida = new AudioOutputI2SNoDAC(); // Crea una instancia de la salida de audio sin DAC
   fuente = new AudioFileSourceSD();   // Crea una instancia de la fuente de audio desde la tarjeta SD
   salida->SetOutputModeMono(true); // Configura la salida de audio en modo monoaural
-
-  if (OTAhabilitado)
+ if (OTAhabilitado)
     initOTA(); // Inicia la configuración OTA si está habilitada
   
   reproducirIntroduccion(); // Reproduce el audio de introducción
@@ -77,10 +95,14 @@ void setup() {
 
 //----------------------------------------------------------------------------------- LOOP---------------------------------------------------------------------
 void loop() {
+  // Manejo de actualización OTA (si está habilitada)
   OTAhabilitado ? ArduinoOTA.handle() : yield(); // Maneja la actualización OTA si está habilitada
+
+  // Obtiene el tiempo actual
   unsigned long tiempoActual = millis(); // Obtiene el tiempo actual
 
-  if (mp3->isRunning()) { // Verifica si el audio está en reproducción
+  // Revisa si hay un archivo MP3 en reproducción
+  if (mp3->isRunning()) {
     if (!mp3->loop() && yaReprodujo) { // Si el audio ha terminado de reproducirse
       yaReprodujo = false; // Reinicia la bandera de reproducción
       mp3->stop();         // Detiene la reproducción
@@ -89,13 +111,12 @@ void loop() {
       Serial.println("Archivo Cerrado"); // Mensaje de archivo cerrado
       yield(); // Pasa el control a otras tareas
     }
-  } else { // Si el audio no está en reproducción
+  } else {
+    verificarRespuestaPulsadores(); // Verifica la respuesta del usuario mediante los pulsadores
 
-    verificarRespuestaTouch(); // Verifica la respuesta del usuario mediante los pines touch
-
-    if (touchPresionado) { // Si se presionó algún botón touch
-      Serial.println("Algún touch fue presionado");
-      touchPresionado = false; // Reinicia la bandera de touch presionado 
+    if (touchPresionado) { // Si se presionó algún botón
+      Serial.println("Algún pulsador fue presionado");
+      touchPresionado = false; // Reinicia la bandera de pulsador presionado 
       Serial.println("Puntaje total: " + puntajeTotal);
 
       if (aleatoreaReproducida) { // Verifica si se reprodujo una respuesta aleatoria
@@ -120,7 +141,7 @@ void loop() {
 void reproducirIntroduccion() {
   const char *archivoIntroduccion = "/intro.mp3"; // Ruta del archivo de introducción
   reproducirAudio(archivoIntroduccion); // Llama a la función de reproducción de audio genérica
-  while (mp3->isRunning()){
+  while (mp3->isRunning()) {
     if (!mp3->loop() && yaReprodujo) { // Si el audio ha terminado de reproducirse
       yaReprodujo = false; // Reinicia la bandera de reproducción
       mp3->stop();         // Detiene la reproducción
@@ -130,7 +151,6 @@ void reproducirIntroduccion() {
       yield(); // Pasa el control a otras tareas
     }
   }
-  //reproducirPregunta(preguntaActual);
   aleatoreaReproducida = true; // Marca que se reprodujo una respuesta aleatoria
   return;
 }
@@ -143,7 +163,8 @@ void reproducirPregunta(int numeroPregunta) {
   Serial.print("Ruta y archivo a reproducir:");
   Serial.println(ruta);
   reproducirAudio(ruta); // Llama a la función de reproducción de audio genérica
-  }
+  touchPresionado = false;
+}
 
 void reproducirRespuestaAleatoria() {
   char ruta[15];
@@ -175,53 +196,57 @@ void reproducirAudio(const char *ruta) {
   yield(); // Pasa el control a otras tareas
   mp3->begin(fuente, salida); // Inicia la reproducción del audio
   yaReprodujo = true; // Marca que se está reproduciendo un audio
+  
+  // Mueve los servomotores mientras se reproduce el audio
+  moverServos();
 }
-//----------------------------------------------------------------------------------Verificación Touch---------------------------------
-void verificarRespuestaTouch() {
-  // 27-06-24 se decide cambiar a pulsadores estandar ya que el cableado puede ser largo y generar problemas con el sistema de pulsado touch
-  /*// Revisa si se ha tocado el sensor de touch "Sí"
-  if (touchRead(TOUCH_PIN_SI) < 30) { // Ajusta este umbral según sea necesario
-    Serial.println("Touch 'Sí' presionado");
-    touchPresionado = true;
-    puntaje += puntosRespuesta[0]; // Suma los puntos de la respuesta "Sí" al puntaje
-    preguntaActual++;              // Avanza a la siguiente pregunta
-    delay(300);                    // Agrega un pequeño retraso para evitar lecturas múltiples
-  }
-
-  // Revisa si se ha tocado el sensor de touch "No"
-  if (touchRead(TOUCH_PIN_NO) < 30) { // Ajusta este umbral según sea necesario
-    Serial.println("Touch 'No' presionado");
-    touchPresionado = true;
-    puntaje += puntosRespuesta[1]; // Suma los puntos de la respuesta "No" al puntaje
-    preguntaActual++;              // Avanza a la siguiente pregunta
-    delay(300);                    // Agrega un pequeño retraso para evitar lecturas múltiples
-  }
-}*/
+//----------------------------------------------------------------------------------Verificación Pulsadores---------------------------------
+void verificarRespuestaPulsadores() {
   unsigned long tiempoActual = millis(); // Obtener el tiempo actual
 
   // Revisa si se ha presionado el pulsador "Sí" y maneja el debounce
-  if (digitalRead(PIN_SI) == HIGH) { // Verifica si el pulsador "Sí" está presionado
+  if (digitalRead(PIN_SI) == LOW) { // Verifica si el pulsador "Sí" está presionado
     if ((tiempoActual - ultimoTiempoSi) > debounceDelay) { // Verifica si ha pasado el tiempo del debounce
       Serial.println("Pulsador 'Sí' presionado");
+      touchPresionado = true;
       pulsadorSiPresionado = true; // Marca el pulsador "Sí" como presionado
-      puntaje += puntosRespuesta[0]; // Suma los puntos de la respuesta "Sí" al puntaje
+      puntajeTotal += puntosRespuesta[0]; // Suma los puntos de la respuesta "Sí" al puntaje
       preguntaActual++;              // Avanza a la siguiente pregunta
       ultimoTiempoSi = tiempoActual; // Actualiza el tiempo de la última lectura del pulsador "Sí"
     }
   }
 
   // Revisa si se ha presionado el pulsador "No" y maneja el debounce
-  if (digitalRead(PIN_NO) == HIGH) { // Verifica si el pulsador "No" está presionado
+  if (digitalRead(PIN_NO) == LOW) { // Verifica si el pulsador "No" está presionado
     if ((tiempoActual - ultimoTiempoNo) > debounceDelay) { // Verifica si ha pasado el tiempo del debounce
       Serial.println("Pulsador 'No' presionado");
       pulsadorNoPresionado = true; // Marca el pulsador "No" como presionado
-      puntaje += puntosRespuesta[1]; // Suma los puntos de la respuesta "No" al puntaje
+      touchPresionado = true;
+      puntajeTotal += puntosRespuesta[1]; // Suma los puntos de la respuesta "No" al puntaje
       preguntaActual++;              // Avanza a la siguiente pregunta
       ultimoTiempoNo = tiempoActual; // Actualiza el tiempo de la última lectura del pulsador "No"
     }
   }
 }
-//------------------------------------------------------------------------------------ Calculo de REsultado Final--------------------
+
+//----------------------------------------------------------------------------------Movimiento de Servos---------------------------------
+void moverServos() {
+  // Movimiento del servomotor "cuspide" de forma aleatoria
+  int anguloCuspide = random(-45, 45); // Genera un ángulo aleatorio entre -45 y 45 grados
+  servoCuspide.write(anguloCuspide);   // Mueve el servomotor "cuspide" al ángulo generado
+  
+  // Movimiento del servomotor "boca" para simular la apertura y cierre de la boca
+  for (int anguloBoca = 0; anguloBoca <= 30; anguloBoca += 5) { // Abre la boca
+    servoBoca.write(anguloBoca); 
+    delay(50); // Pequeño retraso para hacer el movimiento más visible
+  }
+  for (int anguloBoca = 30; anguloBoca >= 0; anguloBoca -= 5) { // Cierra la boca
+    servoBoca.write(anguloBoca); 
+    delay(50); // Pequeño retraso para hacer el movimiento más visible
+  }
+}
+
+//------------------------------------------------------------------------------------ Calculo de Resultado Final--------------------
 const char *obtenerResultadoFinal() {
   // Determina la casa de Hogwarts basada en el puntaje total
   if (puntajeTotal >= 10 && puntajeTotal < 60) {
