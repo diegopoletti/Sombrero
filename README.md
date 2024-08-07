@@ -67,6 +67,7 @@ El código está escrito en C++ para la plataforma ESP32 y utiliza varias biblio
 ## Diagrama de Conexiones
 ![image](https://github.com/user-attachments/assets/9d7e7700-d046-4db9-811e-4e0fd3a52e68)
 
+![image](https://github.com/user-attachments/assets/24cc65a1-362a-46b8-a064-d5c523fbd545)
 
 ## Configuración y Uso
 
