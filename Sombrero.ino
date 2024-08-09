@@ -1,5 +1,6 @@
-const char *version = "4.00"; // Versión del programa 
+const char *version = "4.01"; // Versión del programa 
 // Se realiza cambio a verificación por pulsadores estándar y se agregan servomotores
+// Se modifica el sistema de puntuación para ser más equitativo entre las casas
 
 #include "AudioFileSourceSD.h"   // Biblioteca para fuente de audio desde la tarjeta SD
 #include "AudioGeneratorMP3.h"   // Biblioteca para generar audio MP3
@@ -31,6 +32,18 @@ const char *password = ""; // Contraseña de la red WiFi
 #define PIN_SERVO_CUSPIDE 13 // Pin para el servomotor de la cúspide
 #define PIN_SERVO_BOCA 14    // Pin para el servomotor de la boca
 
+// Pines para LED RGB
+#define PIN_LED_ROJO 25    // Pin GPIO para el LED rojo
+#define PIN_LED_VERDE 26   // Pin GPIO para el LED verde
+#define PIN_LED_AZUL 27    // Pin GPIO para el LED azul
+
+#define CANAL_LEDC_0 0     // Canal LEDC para el LED rojo
+#define CANAL_LEDC_1 1     // Canal LEDC para el LED verde
+#define CANAL_LEDC_2 2     // Canal LEDC para el LED azul
+
+#define LEDC_TIMER_8_BIT 8 // Usar timer de 8 bits para PWM
+#define FRECUENCIA_BASE_LEDC 5000 // Frecuencia base para PWM en Hz
+
 // Objetos Servo
 Servo servoCuspide; // Servo para la cúspide del sombrero
 Servo servoBoca;    // Servo para la boca del sombrero
@@ -55,9 +68,8 @@ bool aleatoreaReproducida = false; // Bandera para verificar si se reprodujo una
 
 // Variables para el manejo de la lógica del cuestionario
 int preguntaActual = 1;                                                                                               // Índice de la pregunta actual
-int puntajeTotal = 0;                                                                                                 // Puntaje acumulado
 const int totalPreguntas = 8;                                                                                         // Número total de preguntas
-const int puntosRespuesta[8] = {10, 20, 30, 40, 50, 60, 70, 80};                                                      // Puntuación de cada pregunta
+const int puntosRespuesta = 10;                                                                                       // Puntuación fija para cada pregunta
 const char *archivosPreguntas[totalPreguntas] = {"q1.mp3", "q2.mp3", "q3.mp3", "q4.mp3", "q5.mp3", "q6.mp3", "q7.mp3", "q8.mp3"}; // Archivos de audio para las preguntas
 unsigned long ultimoUso = 0;                                                                                          // Variable para rastrear el último uso
 
@@ -67,92 +79,154 @@ unsigned long ultimoMovimientoBoca = 0;    // Último tiempo de movimiento de la
 const int intervaloMovimientoCuspide = 500; // Intervalo para el movimiento de la cúspide (en ms)
 const int intervaloMovimientoBoca = 100;    // Intervalo para el movimiento de la boca (en ms)
 
-//--------------------------------------------------------------------------SETUP--------------------------------------------------------------------------
+// Variables para el puntaje de cada casa
+int puntajeGryffindor = 0; // Puntaje para Gryffindor
+int puntajeSlytherin = 0; // Puntaje para Slytherin
+int puntajeRavenclaw = 0; // Puntaje para Ravenclaw
+int puntajeHufflepuff = 0; // Puntaje para Hufflepuff
+
+// Arreglo de respuestas correctas (true para Sí, false para No)
+const bool respuestasCorrectas[8] = {true, false, true, false, true, false, true, false}; // Respuestas correctas para cada pregunta
+/*Este arreglo tiene 8 elementos, uno para cada pregunta del juego (recordemos que totalPreguntas = 8).
+
+Ahora, veamos algunos ejemplos de cómo funciona esto en la práctica:
+
+Ejemplo 1:
+
+Pregunta 1: "¿Te gusta la magia?"
+Respuesta correcta: true (Sí)
+Si el jugador presiona el botón "Sí", obtendrá puntos.
+Si el jugador presiona el botón "No", no obtendrá puntos.
+Ejemplo 2:
+
+Pregunta 2: "¿Prefieres estar solo?"
+Respuesta correcta: false (No)
+Si el jugador presiona el botón "No", obtendrá puntos.
+Si el jugador presiona el botón "Sí", no obtendrá puntos.
+Ejemplo 3:
+
+Pregunta 3: "¿Te gustan los desafíos?"
+Respuesta correcta: true (Sí)
+Si el jugador presiona el botón "Sí", obtendrá puntos.
+Si el jugador presiona el botón "No", no obtendrá puntos.
+Ejemplo 4:
+
+Pregunta 4: "¿Temes a la oscuridad?"
+Respuesta correcta: false (No)
+Si el jugador presiona el botón "No", obtendrá puntos.
+Si el jugador presiona el botón "Sí", no obtendrá puntos.
+En el código, cuando el jugador responde a una pregunta, se compara su respuesta con la respuesta correcta almacenada en respuestasCorrectas. Esto se hace en la función verificarRespuestaPulsadores():
+*/
+
+// Arreglo de casas correspondientes a cada pregunta
+const int casasPorPregunta[8] = {0, 1, 2, 3, 0, 1, 2, 3}; // 0: Gryffindor, 1: Slytherin, 2: Ravenclaw, 3: Hufflepuff
+
+/**
+ * @brief Configura los componentes iniciales del sistema.
+ * 
+ * Esta función inicializa la comunicación serial, configura la tarjeta SD,
+ * los pines de entrada/salida, los servomotores, el audio y, si está habilitado, 
+ * las actualizaciones OTA.
+ */
 void setup() {
-  Serial.begin(115200); // Inicializa la comunicación serial a 115200 baudios
+  Serial.begin(115200); // Inicia la comunicación serial
   Serial.println(version); // Imprime la versión del programa
 
-  if (!SD.begin(CS)) { // Inicializa la tarjeta SD conectada al pin de selección CS
-    Serial.println("Tarjeta SD no encontrada"); // Mensaje de error si no se encuentra la tarjeta SD
-    return; // Termina la configuración si no se encuentra la tarjeta SD
+  // Intenta iniciar la tarjeta SD
+  if (!SD.begin(CS)) {
+    Serial.println("Tarjeta SD no encontrada");
+    return;
   }
 
-  // Configuración de los pines de los pulsadores como entradas con pull-up interno
+  // Configura los pines de los pulsadores como entradas con pull-up
   pinMode(PIN_SI, INPUT_PULLUP);
   pinMode(PIN_NO, INPUT_PULLUP);
   
-  // Inicialización de los servomotores
-  ESP32PWM::allocateTimer(0); // Asigna el timer 0 para los servos
-  ESP32PWM::allocateTimer(1); // Asigna el timer 1 para los servos
-  servoCuspide.setPeriodHertz(50); // Establece la frecuencia del servo de la cúspide
-  servoBoca.setPeriodHertz(50);    // Establece la frecuencia del servo de la boca
-  servoCuspide.attach(PIN_SERVO_CUSPIDE, 500, 2400); // Adjunta el servo de la cúspide al pin correspondiente
-  servoBoca.attach(PIN_SERVO_BOCA, 500, 2400);       // Adjunta el servo de la boca al pin correspondiente
+  // Configura los timers para los servomotores
+  ESP32PWM::allocateTimer(0);
+  ESP32PWM::allocateTimer(1);
+  servoCuspide.setPeriodHertz(50);
+  servoBoca.setPeriodHertz(50);
+  servoCuspide.attach(PIN_SERVO_CUSPIDE, 500, 2400);
+  servoBoca.attach(PIN_SERVO_BOCA, 500, 2400);
 
-  // Crea instancias para el manejo de MP3, Salida de Audio y SD
-  mp3 = new AudioGeneratorMP3();      // Crea una instancia del generador de audio MP3
-  salida = new AudioOutputI2SNoDAC(); // Crea una instancia de la salida de audio sin DAC
-  fuente = new AudioFileSourceSD();   // Crea una instancia de la fuente de audio desde la tarjeta SD
-  salida->SetOutputModeMono(true);    // Configura la salida de audio en modo monoaural
+  /* Configura los pines LED como salidas
+  pinMode(PIN_LED_R, OUTPUT);
+  pinMode(PIN_LED_G, OUTPUT);
+  pinMode(PIN_LED_B, OUTPUT);
+  */
+  configurarLED();
 
+  // Inicializa los componentes de audio
+  mp3 = new AudioGeneratorMP3();
+  salida = new AudioOutputI2SNoDAC();
+  fuente = new AudioFileSourceSD();
+  salida->SetOutputModeMono(true);
+
+  // Si OTA está habilitado, inicia la configuración OTA
   if (OTAhabilitado)
-    initOTA(); // Inicia la configuración OTA si está habilitada
+    initOTA();
   
-  reproducirIntroduccion(); // Reproduce el audio de introducción
+  reproducirIntroduccion(); // Reproduce la introducción del juego
 }
 
-//----------------------------------------------------------------------------------- LOOP---------------------------------------------------------------------
+/**
+ * @brief Función principal que se ejecuta continuamente.
+ * 
+ * Esta función maneja la lógica principal del juego, incluyendo la reproducción de audio,
+ * el movimiento de los servomotores, la verificación de las respuestas y el avance del juego.
+ */
 void loop() {
-  OTAhabilitado ? ArduinoOTA.handle() : yield(); // Maneja la actualización OTA si está habilitada
+  OTAhabilitado ? ArduinoOTA.handle() : yield(); // Maneja OTA si está habilitado, de lo contrario cede el control
   unsigned long tiempoActual = millis(); // Obtiene el tiempo actual
 
-  if (mp3->isRunning()) { // Verifica si el audio está en reproducción
-    if (!mp3->loop() && yaReprodujo) { // Si el audio ha terminado de reproducirse
-      yaReprodujo = false; // Reinicia la bandera de reproducción
-      mp3->stop();         // Detiene la reproducción
-      fuente->close();     // Cierra el archivo de audio
-      Serial.println("Audio Stop"); // Mensaje de parada de audio
-      Serial.println("Archivo Cerrado"); // Mensaje de archivo cerrado
-      // Detiene el movimiento de los servomotores
-      servoCuspide.write(90); // Posición central para la cúspide
-      servoBoca.write(90);    // Posición central para la boca
-      yield(); // Pasa el control a otras tareas
+  if (mp3->isRunning()) {
+    if (!mp3->loop() && yaReprodujo) {
+      yaReprodujo = false;
+      mp3->stop();
+      fuente->close();
+      Serial.println("Audio Stop");
+      Serial.println("Archivo Cerrado");
+      servoCuspide.write(90); // Posición neutral para el servo de la cúspide
+      servoBoca.write(90); // Posición neutral para el servo de la boca
+      yield();
     } else {
-      // Mueve los servomotores mientras se reproduce el audio
-      moverServoCuspide();
-      moverServoBoca();
+      moverServoCuspide(); // Mueve el servo de la cúspide
+      moverServoBoca(); // Mueve el servo de la boca
     }
-  } else { // Si el audio no está en reproducción
-    verificarRespuestaPulsadores(); // Verifica la respuesta del usuario mediante los pulsadores
+  } else {
+    verificarRespuestaPulsadores(); // Verifica si se presionó algún pulsador
 
-    if (pulsadorPresionado) { // Si se presionó algún pulsador
+    if (pulsadorPresionado) {
       Serial.println("Algún pulsador fue presionado");
-      pulsadorPresionado = false; // Reinicia la bandera de pulsador presionado 
-      Serial.println("Puntaje total: " + String(puntajeTotal));
+      pulsadorPresionado = false;
+      Serial.println("Puntajes: G:" + String(puntajeGryffindor) + " S:" + String(puntajeSlytherin) + " R:" + String(puntajeRavenclaw) + " H:" + String(puntajeHufflepuff));
 
-      if (aleatoreaReproducida) { // Verifica si se reprodujo una respuesta aleatoria
-        if (preguntaActual < totalPreguntas) { // Si quedan preguntas por reproducir
+      if (aleatoreaReproducida) {
+        if (preguntaActual <= totalPreguntas) {
           Serial.print("Llamado a pregunta: ");
           Serial.println(preguntaActual);
-          reproducirPregunta(preguntaActual); // Reproduce la pregunta actual
-          aleatoreaReproducida = false; // Reinicia la bandera de respuesta aleatoria
-        } else { // Si no quedan preguntas por reproducir
-          Serial.print("Llamado a reproducir Resultado Final:");
-          reproducirResultadoFinal(); // Reproduce el resultado final basado en el puntaje
+          reproducirPregunta(preguntaActual);
+          aleatoreaReproducida = false;
+        } else {
+          const char* archivoResultado = obtenerResultadoFinal();
+          Serial.print("Resultado final: ");
+          Serial.println(archivoResultado);
+          reproducirAudio(archivoResultado);
         }
       } else {
-        reproducirRespuestaAleatoria(); // Reproduce una respuesta aleatoria
+        reproducirRespuestaAleatoria();
+        aleatoreaReproducida = true;
       }
     }
   }
 }
-
 // -------------------------------------------------------------------------------Fin loop----------------------------------
 //-------------------------------------------------------------------------------------------Reproducciones-----------
 void reproducirIntroduccion() {
   const char *archivoIntroduccion = "/intro.mp3"; // Ruta del archivo de introducción
   reproducirAudio(archivoIntroduccion); // Llama a la función de reproducción de audio genérica
-  while (mp3->isRunning()){
+  while (mp3->isRunning()) {
     if (!mp3->loop() && yaReprodujo) { // Si el audio ha terminado de reproducirse
       yaReprodujo = false; // Reinicia la bandera de reproducción
       mp3->stop();         // Detiene la reproducción
@@ -160,10 +234,6 @@ void reproducirIntroduccion() {
       Serial.println("Audio Stop"); // Mensaje de parada de audio
       Serial.println("Archivo Cerrado"); // Mensaje de archivo cerrado
       yield(); // Pasa el control a otras tareas
-    } else {
-      // Mueve los servomotores mientras se reproduce el audio de introducción
-      moverServoCuspide();
-      moverServoBoca();
     }
   }
   aleatoreaReproducida = true; // Marca que se reprodujo una respuesta aleatoria
@@ -174,7 +244,7 @@ void reproducirPregunta(int numeroPregunta) {
   Serial.print("Pregunta a reproducir:");
   Serial.println(numeroPregunta);
   char ruta[15];
-  snprintf(ruta, sizeof(ruta), "/%s", archivosPreguntas[numeroPregunta - 1]); // Formatea la ruta del archivo de audio de la pregunta
+  snprintf(ruta, sizeof(ruta), "/%s", archivosPreguntas[numeroPregunta]); // Formatea la ruta del archivo de audio de la pregunta
   Serial.print("Ruta y archivo a reproducir:");
   Serial.println(ruta);
   reproducirAudio(ruta); // Llama a la función de reproducción de audio genérica
@@ -184,7 +254,7 @@ void reproducirRespuestaAleatoria() {
   char ruta[15];
   int numeroRespuesta = random(1, 22); // Genera un número aleatorio entre 1 y 22
   snprintf(ruta, sizeof(ruta), "/resp%d.mp3", numeroRespuesta); // Formatea la ruta del archivo de audio de la respuesta aleatoria
-  Serial.print("Aleatoria: ");
+  Serial.print("Aleatorea: ");
   Serial.println(ruta);
   aleatoreaReproducida = true; // Marca que se reprodujo una respuesta aleatoria
   reproducirAudio(ruta); // Llama a la función de reproducción de audio genérica
@@ -210,52 +280,190 @@ void reproducirAudio(const char *ruta) {
   yield(); // Pasa el control a otras tareas
   mp3->begin(fuente, salida); // Inicia la reproducción del audio
   yaReprodujo = true; // Marca que se está reproduciendo un audio
+  
+  // Mueve los servomotores mientras se reproduce el audio
+       moverServoCuspide();
+      moverServoBoca();
 }
-
-//----------------------------------------------------------------------------------Verificación Pulsadores---------------------------------
+/**
+ * @brief Verifica las respuestas de los pulsadores y actualiza los puntajes.
+ * 
+ * Esta función lee el estado de los pulsadores, maneja el debounce, y actualiza
+ * los puntajes de las casas según las respuestas dadas.
+ */
 void verificarRespuestaPulsadores() {
-  unsigned long tiempoActual = millis(); // Obtener el tiempo actual
+  unsigned long tiempoActual = millis(); // Obtiene el tiempo actual
 
-  // Revisa si se ha presionado el pulsador "Sí" y maneja el debounce
-  if (digitalRead(PIN_SI) == LOW) { // Verifica si el pulsador "Sí" está presionado (activo en bajo)
-    if ((tiempoActual - ultimoTiempoSi) > debounceDelay) { // Verifica si ha pasado el tiempo del debounce
-      Serial.println("Pulsador 'Sí' presionado");
-      pulsadorSiPresionado = true; // Marca el pulsador "Sí" como presionado
-      puntajeTotal += puntosRespuesta[preguntaActual - 1]; // Suma los puntos de la respuesta "Sí" al puntaje
-      preguntaActual++;              // Avanza a la siguiente pregunta
-      ultimoTiempoSi = tiempoActual; // Actualiza el tiempo de la última lectura del pulsador "Sí"
-      pulsadorPresionado = true; // Indica que se ha presionado un pulsador
+  int lecturaSi = digitalRead(PIN_SI); // Lee el estado del pulsador "Sí"
+  int lecturaNo = digitalRead(PIN_NO); // Lee el estado del pulsador "No"
+
+  // Maneja el pulsador "Sí"
+  if (lecturaSi == LOW && !pulsadorSiPresionado && (tiempoActual - ultimoTiempoSi > debounceDelay)) {
+    pulsadorSiPresionado = true;
+    pulsadorPresionado = true;
+    ultimoTiempoSi = tiempoActual;
+    if (respuestasCorrectas[preguntaActual - 1]) { // Si la respuesta es correcta
+      switch (casasPorPregunta[preguntaActual - 1]) {
+        case 0: puntajeGryffindor += puntosRespuesta; break; // Suma puntos a Gryffindor
+        case 1: puntajeSlytherin += puntosRespuesta; break; // Suma puntos a Slytherin
+        case 2: puntajeRavenclaw += puntosRespuesta; break; // Suma puntos a Ravenclaw
+        case 3: puntajeHufflepuff += puntosRespuesta; break; // Suma puntos a Hufflepuff
+      }
     }
+    preguntaActual++; // Avanza a la siguiente pregunta
+  } else if (lecturaSi == HIGH) {
+    pulsadorSiPresionado = false;
   }
 
-  // Revisa si se ha presionado el pulsador "No" y maneja el debounce
-  if (digitalRead(PIN_NO) == LOW) { // Verifica si el pulsador "No" está presionado (activo en bajo)
-    if ((tiempoActual - ultimoTiempoNo) > debounceDelay) { // Verifica si ha pasado el tiempo del debounce
-      Serial.println("Pulsador 'No' presionado");
-      pulsadorNoPresionado = true; // Marca el pulsador "No" como presionado
-      preguntaActual++;              // Avanza a la siguiente pregunta sin sumar puntos
-      ultimoTiempoNo = tiempoActual; // Actualiza el tiempo de la última lectura del pulsador "No"
-      pulsadorPresionado = true; // Indica que se ha presionado un pulsador
+  // Maneja el pulsador "No"
+  if (lecturaNo == LOW && !pulsadorNoPresionado && (tiempoActual - ultimoTiempoNo > debounceDelay)) {
+    pulsadorNoPresionado = true;
+    pulsadorPresionado = true;
+    ultimoTiempoNo = tiempoActual;
+    if (!respuestasCorrectas[preguntaActual - 1]) { // Si la respuesta es correcta
+      switch (casasPorPregunta[preguntaActual - 1]) {
+        case 0: puntajeGryffindor += puntosRespuesta; break; // Suma puntos a Gryffindor
+        case 1: puntajeSlytherin += puntosRespuesta; break; // Suma puntos a Slytherin
+        case 2: puntajeRavenclaw += puntosRespuesta; break; // Suma puntos a Ravenclaw
+        case 3: puntajeHufflepuff += puntosRespuesta; break; // Suma puntos a Hufflepuff
+      }
     }
+    preguntaActual++; // Avanza a la siguiente pregunta
+  } else if (lecturaNo == HIGH) {
+    pulsadorNoPresionado = false;
   }
 }
 
-//------------------------------------------------------------------------------------ Cálculo de Resultado Final--------------------
+/**
+ * @brief Determina el resultado final del juego y devuelve el archivo de audio correspondiente.
+ * 
+ * Esta función compara los puntajes de las casas, maneja empates y devuelve el nombre
+ * del archivo de audio para el resultado final.
+ * 
+ * @return const char* Nombre del archivo de audio para el resultado final.
+ */
 const char *obtenerResultadoFinal() {
-  // Determina la casa de Hogwarts basada en el puntaje total
-  if (puntajeTotal >= 10 && puntajeTotal < 60) {
-    return "/Gryffindor.mp3"; // Ruta del archivo para Gryffindor
-  } else if (puntajeTotal >= 60 && puntajeTotal < 140) {
-    return "/Ravenclaw.mp3"; // Ruta del archivo para Ravenclaw
-  } else if (puntajeTotal >= 140 && puntajeTotal < 210) {
-    return "/Hufflepuff.mp3"; // Ruta del archivo para Hufflepuff
-  } else if (puntajeTotal >= 210 && puntajeTotal <= 280) {
-    return "/Slytherin.mp3"; // Ruta del archivo para Slytherin
-  } else {
-    return "/Result_error.mp3"; // Ruta del archivo para errores o puntajes fuera de rango
+  int puntajesMaximos[4] = {puntajeGryffindor, puntajeSlytherin, puntajeRavenclaw, puntajeHufflepuff}; // Arreglo con los puntajes de todas las casas
+  int casaGanadora = 0; // Índice de la casa ganadora
+  int segundoLugar = 0; // Índice de la casa en segundo lugar
+  int contadorEmpates = 0; // Contador de empates
+
+  // Encontrar la casa con mayor puntaje y contar empates
+  for (int i = 1; i < 4; i++) {
+    if (puntajesMaximos[i] > puntajesMaximos[casaGanadora]) {
+      segundoLugar = casaGanadora;
+      casaGanadora = i;
+      contadorEmpates = 0;
+    } else if (puntajesMaximos[i] == puntajesMaximos[casaGanadora]) {
+      segundoLugar = i;
+      contadorEmpates++;
+    }
+  }
+
+  // Manejar empates
+  if (contadorEmpates >= 2) {
+    LedPWM(128, 0, 128); // Color púrpura para Muggles
+    return "/muggle.mp3"; // Archivo de audio para Muggles
+  } else if (contadorEmpates == 1) {
+    casaGanadora = random(2) == 0 ? casaGanadora : segundoLugar; // Elegir aleatoriamente entre las dos casas empatadas
+  }
+
+  // Asignar color y archivo de audio según la casa ganadora
+  switch (casaGanadora) {
+    case 0:
+      LedPWM(255, 0, 0); // Rojo para Gryffindor
+      return "/gryffindor.mp3";
+    case 1:
+      LedPWM(0, 255, 0); // Verde para Slytherin
+      return "/slytherin.mp3";
+    case 2:
+      LedPWM(0, 0, 255); // Azul para Ravenclaw
+      return "/ravenclaw.mp3";
+    case 3:
+      LedPWM(255, 255, 0); // Amarillo para Hufflepuff
+      return "/hufflepuff.mp3";
+    default:
+      LedPWM(0, 0, 0); // Apagar LED en caso de error
+      return "/error.mp3";
   }
 }
 
+/**
+ * @brief Configura los canales LEDC para el control de LED RGB.
+ * 
+ * Esta función inicializa tres canales LEDC y los asocia con los pines GPIO
+ * correspondientes a los LEDs rojo, verde y azul. Debe ser llamada en setup().
+ */
+void configurarLED() {
+  // Configurar los canales LEDC
+  ledcSetup(CANAL_LEDC_0, FRECUENCIA_BASE_LEDC, LEDC_TIMER_8_BIT);
+  ledcSetup(CANAL_LEDC_1, FRECUENCIA_BASE_LEDC, LEDC_TIMER_8_BIT);
+  ledcSetup(CANAL_LEDC_2, FRECUENCIA_BASE_LEDC, LEDC_TIMER_8_BIT);
+  
+  // Asociar los pines GPIO con los canales LEDC
+  ledcAttachPin(PIN_LED_ROJO, CANAL_LEDC_0);
+  ledcAttachPin(PIN_LED_VERDE, CANAL_LEDC_1);
+  ledcAttachPin(PIN_LED_AZUL, CANAL_LEDC_2);
+}
+
+/**
+ * @brief Controla el color de un LED RGB utilizando PWM por hardware.
+ * 
+ * @param rojo Valor de intensidad para el color rojo (0-255).
+ * @param verde Valor de intensidad para el color verde (0-255).
+ * @param azul Valor de intensidad para el color azul (0-255).
+ * 
+ * @details
+ * Esta función utiliza el controlador LEDC del ESP32 para generar señales PWM
+ * eficientes por hardware. Cada componente de color (rojo, verde, azul) se
+ * controla independientemente utilizando un canal LEDC dedicado.
+ * 
+ * Ventajas de esta implementación:
+ * 1. Mayor eficiencia: Utiliza PWM por hardware, lo que reduce la carga de la CPU.
+ * 2. Mayor precisión: El control de tiempo por hardware es más preciso que la
+ *    emulación por software.
+ * 3. Sin parpadeo: La alta frecuencia de PWM (5000 Hz) evita el parpadeo visible.
+ * 4. Flexibilidad: Permite ajustar fácilmente la frecuencia PWM si es necesario.
+ * 
+ * Esta implementación es específica para ESP32 y aprovecha sus capacidades de
+ * hardware para un control de LED más eficiente y preciso.
+ */
+void LedPWM(int rojo, int verde, int azul) {
+  // Escribir los valores PWM en los canales LEDC correspondientes
+  ledcWrite(CANAL_LEDC_0, rojo);
+  ledcWrite(CANAL_LEDC_1, verde);
+  ledcWrite(CANAL_LEDC_2, azul);
+}
+
+/**
+ * @brief Controla el movimiento del servomotor de la cúspide.
+ *
+ * Esta función mueve el servomotor de la cúspide a una posición aleatoria
+ * en intervalos regulares.
+ */
+void moverServoCuspide() {
+  unsigned long tiempoActual = millis();
+  if (tiempoActual - ultimoMovimientoCuspide > intervaloMovimientoCuspide) {
+    int posicion = random(60, 121); // Posición aleatoria entre 60 y 120 grados
+    servoCuspide.write(posicion);
+    ultimoMovimientoCuspide = tiempoActual;
+  }
+}
+
+/**
+ * @brief Controla el movimiento del servomotor de la boca.
+ *
+ * Esta función mueve el servomotor de la boca a una posición aleatoria
+ * en intervalos regulares.
+ */
+void moverServoBoca() {
+  unsigned long tiempoActual = millis();
+  if (tiempoActual - ultimoMovimientoBoca > intervaloMovimientoBoca) {
+    int posicion = random(60, 121); // Posición aleatoria entre 60 y 120 grados
+    servoBoca.write(posicion);
+    ultimoMovimientoBoca = tiempoActual;
+  }
+}
 // -------------------------------------------------------------------------------------------OTA--------------------------------------------------------------------
 void initOTA() {
   WiFi.begin(ssid, password); // Conecta a la red WiFi
@@ -301,24 +509,4 @@ void initOTA() {
 
   ArduinoOTA.begin(); // Inicia el servicio OTA
   Serial.println("Listo para actualización OTA"); // Mensaje de preparación para OTA
-}
-
-// Función para mover el servomotor de la cúspide
-void moverServoCuspide() {
-  unsigned long tiempoActual = millis();
-  if (tiempoActual - ultimoMovimientoCuspide > intervaloMovimientoCuspide) {
-    int posicion = random(45, 136); // Genera una posición aleatoria entre 45 y 135 grados
-    servoCuspide.write(posicion);
-    ultimoMovimientoCuspide = tiempoActual;
-  }
-}
-
-// Función para mover el servomotor de la boca
-void moverServoBoca() {
-  unsigned long tiempoActual = millis();
-  if (tiempoActual - ultimoMovimientoBoca > intervaloMovimientoBoca) {
-    int posicion = random(70, 111); // Genera una posición aleatoria entre 70 y 110 grados
-    servoBoca.write(posicion);
-    ultimoMovimientoBoca = tiempoActual;
-  }
 }
