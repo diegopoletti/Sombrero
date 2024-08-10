@@ -1,4 +1,4 @@
-const char *version = "4.01"; // Versión del programa 
+const char *version = "4.02"; // Versión del programa 
 // Se realiza cambio a verificación por pulsadores estándar y se agregan servomotores
 // Se modifica el sistema de puntuación para ser más equitativo entre las casas
 
@@ -86,7 +86,7 @@ int puntajeRavenclaw = 0; // Puntaje para Ravenclaw
 int puntajeHufflepuff = 0; // Puntaje para Hufflepuff
 
 // Arreglo de respuestas correctas (true para Sí, false para No)
-const bool respuestasCorrectas[8] = {true, false, true, false, true, false, true, false}; // Respuestas correctas para cada pregunta
+const bool respuestasCorrectas[totalPreguntas] = {true, false, true, false, true, false, true, false}; // Respuestas correctas para cada pregunta
 /*Este arreglo tiene 8 elementos, uno para cada pregunta del juego (recordemos que totalPreguntas = 8).
 
 Ahora, veamos algunos ejemplos de cómo funciona esto en la práctica:
@@ -119,7 +119,13 @@ En el código, cuando el jugador responde a una pregunta, se compara su respuest
 */
 
 // Arreglo de casas correspondientes a cada pregunta
-const int casasPorPregunta[8] = {0, 1, 2, 3, 0, 1, 2, 3}; // 0: Gryffindor, 1: Slytherin, 2: Ravenclaw, 3: Hufflepuff
+const int casasPorPregunta[totalPreguntas] = {0, 1, 2, 3, 0, 1, 2, 3}; // 0: Gryffindor, 1: Slytherin, 2: Ravenclaw, 3: Hufflepuff
+
+// Arreglos para almacenar el orden aleatorio
+char* archivosPreguntas_aleatorio[totalPreguntas];
+bool respuestasCorrectas_aleatorio[totalPreguntas];
+int casasPorPregunta_aleatorio[totalPreguntas];
+
 
 /**
  * @brief Configura los componentes iniciales del sistema.
@@ -138,7 +144,10 @@ void setup() {
     return;
   }
 
+    randomSeed(analogRead(0)); // Inicializa la semilla aleatoria
+    reordenarPreguntas(); // Reordena las preguntas al inicio
   // Configura los pines de los pulsadores como entradas con pull-up
+
   pinMode(PIN_SI, INPUT_PULLUP);
   pinMode(PIN_NO, INPUT_PULLUP);
   
@@ -240,15 +249,21 @@ void reproducirIntroduccion() {
   return;
 }
 
+/**
+ * @brief Reproduce una pregunta específica.
+ * 
+ * @param numeroPregunta El número de la pregunta a reproducir (1-8).
+ */
 void reproducirPregunta(int numeroPregunta) {
-  Serial.print("Pregunta a reproducir:");
-  Serial.println(numeroPregunta);
-  char ruta[15];
-  snprintf(ruta, sizeof(ruta), "/%s", archivosPreguntas[numeroPregunta]); // Formatea la ruta del archivo de audio de la pregunta
-  Serial.print("Ruta y archivo a reproducir:");
-  Serial.println(ruta);
-  reproducirAudio(ruta); // Llama a la función de reproducción de audio genérica
+    Serial.print("Pregunta a reproducir: ");
+    Serial.println(numeroPregunta);
+    char ruta[15];
+    snprintf(ruta, sizeof(ruta), "/%s", archivosPreguntas_aleatorio[numeroPregunta - 1]); // Usa el arreglo aleatorio
+    Serial.print("Ruta y archivo a reproducir: ");
+    Serial.println(ruta);
+    reproducirAudio(ruta);
 }
+
 
 void reproducirRespuestaAleatoria() {
   char ruta[15];
@@ -292,46 +307,46 @@ void reproducirAudio(const char *ruta) {
  * los puntajes de las casas según las respuestas dadas.
  */
 void verificarRespuestaPulsadores() {
-  unsigned long tiempoActual = millis(); // Obtiene el tiempo actual
+    unsigned long tiempoActual = millis();
 
-  int lecturaSi = digitalRead(PIN_SI); // Lee el estado del pulsador "Sí"
-  int lecturaNo = digitalRead(PIN_NO); // Lee el estado del pulsador "No"
+    int lecturaSi = digitalRead(PIN_SI);
+    int lecturaNo = digitalRead(PIN_NO);
 
-  // Maneja el pulsador "Sí"
-  if (lecturaSi == LOW && !pulsadorSiPresionado && (tiempoActual - ultimoTiempoSi > debounceDelay)) {
-    pulsadorSiPresionado = true;
-    pulsadorPresionado = true;
-    ultimoTiempoSi = tiempoActual;
-    if (respuestasCorrectas[preguntaActual - 1]) { // Si la respuesta es correcta
-      switch (casasPorPregunta[preguntaActual - 1]) {
-        case 0: puntajeGryffindor += puntosRespuesta; break; // Suma puntos a Gryffindor
-        case 1: puntajeSlytherin += puntosRespuesta; break; // Suma puntos a Slytherin
-        case 2: puntajeRavenclaw += puntosRespuesta; break; // Suma puntos a Ravenclaw
-        case 3: puntajeHufflepuff += puntosRespuesta; break; // Suma puntos a Hufflepuff
-      }
+    // Maneja el pulsador "Sí"
+    if (lecturaSi == LOW && !pulsadorSiPresionado && (tiempoActual - ultimoTiempoSi > debounceDelay)) {
+        pulsadorSiPresionado = true;
+        pulsadorPresionado = true;
+        ultimoTiempoSi = tiempoActual;
+        if (respuestasCorrectas_aleatorio[preguntaActual - 1]) { // Usa el arreglo aleatorio
+            switch (casasPorPregunta_aleatorio[preguntaActual - 1]) { // Usa el arreglo aleatorio
+                case 0: puntajeGryffindor += puntosRespuesta; break;
+                case 1: puntajeSlytherin += puntosRespuesta; break;
+                case 2: puntajeRavenclaw += puntosRespuesta; break;
+                case 3: puntajeHufflepuff += puntosRespuesta; break;
+            }
+        }
+        preguntaActual++;
+    } else if (lecturaSi == HIGH) {
+        pulsadorSiPresionado = false;
     }
-    preguntaActual++; // Avanza a la siguiente pregunta
-  } else if (lecturaSi == HIGH) {
-    pulsadorSiPresionado = false;
-  }
 
-  // Maneja el pulsador "No"
-  if (lecturaNo == LOW && !pulsadorNoPresionado && (tiempoActual - ultimoTiempoNo > debounceDelay)) {
-    pulsadorNoPresionado = true;
-    pulsadorPresionado = true;
-    ultimoTiempoNo = tiempoActual;
-    if (!respuestasCorrectas[preguntaActual - 1]) { // Si la respuesta es correcta
-      switch (casasPorPregunta[preguntaActual - 1]) {
-        case 0: puntajeGryffindor += puntosRespuesta; break; // Suma puntos a Gryffindor
-        case 1: puntajeSlytherin += puntosRespuesta; break; // Suma puntos a Slytherin
-        case 2: puntajeRavenclaw += puntosRespuesta; break; // Suma puntos a Ravenclaw
-        case 3: puntajeHufflepuff += puntosRespuesta; break; // Suma puntos a Hufflepuff
-      }
+    // Maneja el pulsador "No"
+    if (lecturaNo == LOW && !pulsadorNoPresionado && (tiempoActual - ultimoTiempoNo > debounceDelay)) {
+        pulsadorNoPresionado = true;
+        pulsadorPresionado = true;
+        ultimoTiempoNo = tiempoActual;
+        if (!respuestasCorrectas_aleatorio[preguntaActual - 1]) { // Usa el arreglo aleatorio
+            switch (casasPorPregunta_aleatorio[preguntaActual - 1]) { // Usa el arreglo aleatorio
+                case 0: puntajeGryffindor += puntosRespuesta; break;
+                case 1: puntajeSlytherin += puntosRespuesta; break;
+                case 2: puntajeRavenclaw += puntosRespuesta; break;
+                case 3: puntajeHufflepuff += puntosRespuesta; break;
+            }
+        }
+        preguntaActual++;
+    } else if (lecturaNo == HIGH) {
+        pulsadorNoPresionado = false;
     }
-    preguntaActual++; // Avanza a la siguiente pregunta
-  } else if (lecturaNo == HIGH) {
-    pulsadorNoPresionado = false;
-  }
 }
 
 /**
@@ -386,6 +401,17 @@ const char *obtenerResultadoFinal() {
       LedPWM(0, 0, 0); // Apagar LED en caso de error
       return "/error.mp3";
   }
+  // Si todas las preguntas han sido respondidas, reordenar y reiniciar
+    if (preguntaActual > totalPreguntas) {
+        reordenarPreguntas();
+        preguntaActual = 1;
+        // Reiniciar puntajes si es necesario
+        puntajeGryffindor = 0;
+        puntajeSlytherin = 0;
+        puntajeRavenclaw = 0;
+        puntajeHufflepuff = 0;
+    }
+}
 }
 
 /**
@@ -464,7 +490,40 @@ void moverServoBoca() {
     ultimoMovimientoBoca = tiempoActual;
   }
 }
-// -------------------------------------------------------------------------------------------OTA--------------------------------------------------------------------
+/**
+ * @brief Reordena aleatoriamente las preguntas, respuestas y casas correspondientes.
+ * 
+ * Esta función crea un nuevo orden aleatorio para las preguntas, asegurándose
+ * de que las respuestas y casas correspondientes se mantengan alineadas.
+ */
+void reordenarPreguntas() {
+    // Crear un arreglo de índices
+    int indices[totalPreguntas];
+    for (int i = 0; i < totalPreguntas; i++) {
+        indices[i] = i;
+    }
+    
+    // Mezclar los índices aleatoriamente
+    for (int i = totalPreguntas - 1; i > 0; i--) {
+        int j = random(i + 1);
+        // Intercambiar índices
+        int temp = indices[i];
+        indices[i] = indices[j];
+        indices[j] = temp;
+    }
+    
+    // Usar los índices mezclados para reordenar los arreglos
+    for (int i = 0; i < totalPreguntas; i++) {
+        archivosPreguntas_aleatorio[i] = archivosPreguntas[indices[i]];
+        respuestasCorrectas_aleatorio[i] = respuestasCorrectas[indices[i]];
+        casasPorPregunta_aleatorio[i] = casasPorPregunta[indices[i]];
+    }
+    
+    Serial.println("Preguntas reordenadas aleatoriamente");
+}
+
+
+//-------------------------------------------------------------------------------------------OTA--------------------------------------------------------------------
 void initOTA() {
   WiFi.begin(ssid, password); // Conecta a la red WiFi
   while (WiFi.status() != WL_CONNECTED) { // Espera hasta que la conexión se establezca
