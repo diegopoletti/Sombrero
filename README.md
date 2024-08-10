@@ -87,7 +87,21 @@ Las contribuciones a este proyecto son bienvenidas. Por favor, abre un issue par
  # Sombrero 4.00
  // Se realizo agregado de servomotores para cuspide y boca del sombrero.
  // se cambio logica de pulsadores para funcionar con nivel activo en bajo.
- # Sombrero 4.1
- // cambiar la logica de las preguntas haciendo que simen la misma cantidad de puntaje, llegado a un empate reproducir aleatoriamente uno de los dos perfiles, si se dan tres empates o mas , reproducir indesiso 
- // agrgar  3 pwm  de salida  para colocar una tira de led RGB  que cambie de color sefun la casa. Rojo( grifindor) verde ( sliderin) blue ( reuvenclo )  Amarrillo ( hofulpof) 50% rojo 50% verde 
+ # Sombrero 4.01
+ //Explicación de los cambios al sistema de puntajes:
+ //Hay cuatro casas de Hogwarts: Gryffindor, Slytherin, Ravenclaw y Hufflepuff.
+ //El juego tiene 8 preguntas en total.
+ //Cada pregunta está relacionada con una casa específica.
+ //Cuando respondes correctamente a una pregunta, la casa asociada a esa pregunta recibe puntos.
+ //Las preguntas tienen diferentes valores de puntos: la primera vale 10, la segunda 20, y así sucesivamente hasta la última que vale 80 puntos.
+ //Al final del juego, se suman los puntos de cada casa.
+ //La casa con más puntos es la ganadora, y esa será tu casa asignada.
+ //Si hay un empate entre dos casas, se elige una al azar.
+ //Si hay un empate entre tres o más casas, el resultado es "Moogle" (que es como decir que eres un mago muy versátil).
+ # Sombrero 4.02
+ //Se mantienen los arreglos originales (archivosPreguntas, respuestasCorrectas, casasPorPregunta) y se crean nuevos arreglos para almacenar el orden aleatorio.
+ //Se ha añadido una nueva función reordenarPreguntas() que mezcla aleatoriamente los índices y luego usa estos índices para reordenar los arreglos.
+ //La función setup() ahora inicializa la semilla aleatoria y llama a reordenarPreguntas() al inicio.
+ //se verifica si todas las preguntas han sido respondidas. Si es así, se llama a reordenarPreguntas() y se reinicia el contador de preguntas y los //puntajes.
+ //Las funciones reproducirPregunta() y verificarRespuestaPulsadores() ahora usan los arreglos aleatorios en lugar de los originales.
  
