@@ -104,4 +104,9 @@ Las contribuciones a este proyecto son bienvenidas. Por favor, abre un issue par
  //La función setup() ahora inicializa la semilla aleatoria y llama a reordenarPreguntas() al inicio.
  //se verifica si todas las preguntas han sido respondidas. Si es así, se llama a reordenarPreguntas() y se reinicia el contador de preguntas y los //puntajes.
  //Las funciones reproducirPregunta() y verificarRespuestaPulsadores() ahora usan los arreglos aleatorios en lugar de los originales.
+ # Spmbrero 4.03 
+ // Agregar modo bardero. PIN de entrada D34 
+ // AGregar el reset, poner que se detenga cada vez que tira el resultado. hacer otro test espera el reset o modo bardero  
+ // agragar el almacenamiento de datos de las respuestas y modo bardero.
+ 
  
