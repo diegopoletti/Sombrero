@@ -108,5 +108,8 @@ Las contribuciones a este proyecto son bienvenidas. Por favor, abre un issue par
  // Agregar modo bardero. PIN de entrada D34 
  // AGregar el reset, poner que se detenga cada vez que tira el resultado. hacer otro test espera el reset o modo bardero  
  // agragar el almacenamiento de datos de las respuestas y modo bardero.
+ #  DOBY Q HABLA. 
+ // Agregar cada sierto tiempo que se valla  a dormir 10min 
+ // boton para iniciar la secuencia   pin D34  y gregar el boton reset.  
  
  
