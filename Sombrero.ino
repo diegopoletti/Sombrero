@@ -160,20 +160,21 @@ void setup() {
   pinMode(PIN_PICANTE, INPUT_PULLUP); // Configura el pin del modo picante
   
   // Configura los timers para los servomotores
-  ESP32PWM::allocateTimer(0);
-  ESP32PWM::allocateTimer(1);
-  servoCuspide.setPeriodHertz(50);
-  servoBoca.setPeriodHertz(50);
-  servoCuspide.attach(PIN_SERVO_CUSPIDE, 500, 2400);
-  servoBoca.attach(PIN_SERVO_BOCA, 500, 2400);
 
-  configurarLED();
+  ESP32PWM::allocateTimer(0); // Asignar el temporizador 0 para el control de PWM
+  ESP32PWM::allocateTimer(1); // Asignar el temporizador 1 para el control de PWM
+  servoCuspide.setPeriodHertz(50); // Establecer la frecuencia del servo en 50 Hz para el servoCuspide
+  servoBoca.setPeriodHertz(50); // Establecer la frecuencia del servo en 50 Hz para el servoBoca
+  servoCuspide.attach(PIN_SERVO_CUSPIDE, 500, 2400); // Conectar el servoCuspide al pin definido, con un rango de pulso de 500 a 2400 microsegundos
+  servoBoca.attach(PIN_SERVO_BOCA, 500, 2400); // Conectar el servoBoca al pin definido, con un rango de pulso de 500 a 2400 microsegundos
+
+  configurarLED(); // Llama a la función para configurar el LED
 
   // Inicializa los componentes de audio
-  mp3 = new AudioGeneratorMP3();
-  salida = new AudioOutputI2SNoDAC();
-  fuente = new AudioFileSourceSD();
-  salida->SetOutputModeMono(true);
+  mp3 = new AudioGeneratorMP3(); // Crea una nueva instancia del generador de audio MP3
+  salida = new AudioOutputI2SNoDAC(); // Crea una nueva instancia de salida de audio I2S sin DAC
+  fuente = new AudioFileSourceSD(); // Crea una nueva fuente de archivo de audio desde la tarjeta SD
+  salida->SetOutputModeMono(true); // Configura la salida de audio en modo mono
 
   // Si OTA está habilitado, inicia la configuración OTA
   if (OTAhabilitado)
@@ -189,50 +190,60 @@ void setup() {
  * el movimiento de los servomotores, la verificación de las respuestas y el avance del juego.
  */
 void loop() {
-  OTAhabilitado ? ArduinoOTA.handle() : yield(); // Maneja OTA si está habilitado, de lo contrario cede el control
-  unsigned long tiempoActual = millis(); // Obtiene el tiempo actual
+  // Maneja OTA si está habilitado, de lo contrario cede el control
+  OTAhabilitado ? ArduinoOTA.handle() : yield(); 
+  
+  // Obtiene el tiempo actual en milisegundos desde que comenzó el programa
+  unsigned long tiempoActual = millis(); 
 
+  // Verifica si el reproductor de MP3 está en funcionamiento
   if (mp3->isRunning()) {
+    // Si el MP3 no está en bucle y ya se reprodujo, detiene la reproducción
     if (!mp3->loop() && yaReprodujo) {
-      yaReprodujo = false;
-      mp3->stop();
-      fuente->close();
-      Serial.println("Audio Stop");
-      Serial.println("Archivo Cerrado");
+      yaReprodujo = false; // Reinicia la bandera de reproducción
+      mp3->stop(); // Detiene la reproducción de audio
+      fuente->close(); // Cierra la fuente de audio
+      Serial.println("Audio Stop"); // Imprime en el monitor serie que el audio se detuvo
+      Serial.println("Archivo Cerrado"); // Imprime que el archivo de audio se cerró
       servoCuspide.write(90); // Posición neutral para el servo de la cúspide
       servoBoca.write(90); // Posición neutral para el servo de la boca
-      yield();
+      yield(); // Cede el control para permitir otras tareas
     } else {
       moverServoCuspide(); // Mueve el servo de la cúspide
       moverServoBoca(); // Mueve el servo de la boca
     }
   } else {
-    verificarRespuestaPulsadores(); // Verifica si se presionó algún pulsador
+    // Verifica si se presionó algún pulsador
+    verificarRespuestaPulsadores(); 
 
+    // Si algún pulsador fue presionado
     if (pulsadorPresionado) {
-      Serial.println("Algún pulsador fue presionado");
-      pulsadorPresionado = false;
+      Serial.println("Algún pulsador fue presionado"); // Imprime que un pulsador fue activado
+      pulsadorPresionado = false; // Reinicia la bandera de pulsador presionado
+      // Imprime los puntajes de las casas
       Serial.println("Puntajes: G:" + String(puntajeGryffindor) + " S:" + String(puntajeSlytherin) + " R:" + String(puntajeRavenclaw) + " H:" + String(puntajeHufflepuff));
 
+      // Si el modo picante está activado
       if (modoPicanteActivado) {
         reproducirModoPicante(); // Reproduce el modo picante
         modoPicanteActivado = false; // Desactiva el modo picante después de reproducirlo
       } else if (aleatoreaReproducida) {
+        // Si hay preguntas restantes
         if (preguntaActual <= totalPreguntas) {
-          Serial.print("Llamado a pregunta: ");
+          Serial.print("Llamado a pregunta: "); // Imprime el número de la pregunta actual
           Serial.println(preguntaActual);
-          reproducirPregunta(preguntaActual);
-          aleatoreaReproducida = false;
+          reproducirPregunta(preguntaActual); // Reproduce la pregunta actual
+          aleatoreaReproducida = false; // Reinicia la bandera de reproducción aleatoria
         } else {
-          const char* archivoResultado = obtenerResultadoFinal();
-          Serial.print("Resultado final: ");
+          const char* archivoResultado = obtenerResultadoFinal(); // Obtiene el resultado final
+          Serial.print("Resultado final: "); // Imprime el resultado final
           Serial.println(archivoResultado);
-          reproducirAudio(archivoResultado);
+          reproducirAudio(archivoResultado); // Reproduce el audio del resultado final
           grabarResultadoCSV(); // Graba el resultado en el archivo CSV
         }
       } else {
-        reproducirRespuestaAleatoria();
-        aleatoreaReproducida = true;
+        reproducirRespuestaAleatoria(); // Reproduce una respuesta aleatoria
+        aleatoreaReproducida = true; // Marca que se ha reproducido una respuesta aleatoria
       }
     }
   }
@@ -259,16 +270,7 @@ void reproducirIntroduccion() {
   }
   aleatoreaReproducida = true; // Marca que se reprodujo una respuesta aleatoria
   return;
-}
-void reproducirPregunta(int numeroPregunta) {
-  Serial.print("Pregunta a reproducir:");
-  Serial.println(numeroPregunta);
-  char ruta[15];
-  snprintf(ruta, sizeof(ruta), "/%s", archivosPreguntas[numeroPregunta]); // Formatea la ruta del archivo de audio de la pregunta
-  Serial.print("Ruta y archivo a reproducir:");
-  Serial.println(ruta);
-  reproducirAudio(ruta); // Llama a la función de reproducción de audio genérica
-}
+  }
 void reproducirRespuestaAleatoria() {
   char ruta[15];
   int numeroRespuesta = random(1, 22); // Genera un número aleatorio entre 1 y 22
@@ -278,6 +280,16 @@ void reproducirRespuestaAleatoria() {
   aleatoreaReproducida = true; // Marca que se reprodujo una respuesta aleatoria
   reproducirAudio(ruta); // Llama a la función de reproducción de audio genérica
   pulsadorPresionado = true;
+}
+
+void reproducirPregunta(int numeroPregunta) {
+  Serial.print("Pregunta a reproducir:"); // Imprime un mensaje en el monitor serial
+  Serial.println(numeroPregunta); // Imprime el número de la pregunta a reproducir
+  char ruta[15]; // Declara un arreglo de caracteres para almacenar la ruta del archivo
+  snprintf(ruta, sizeof(ruta), "/%s", archivosPreguntas[numeroPregunta]); // Formatea la ruta del archivo de audio de la pregunta
+  Serial.print("Ruta y archivo a reproducir:"); // Imprime un mensaje en el monitor serial sobre la ruta
+  Serial.println(ruta); // Imprime la ruta del archivo que se va a reproducir
+  reproducirAudio(ruta); // Llama a la función de reproducción de audio genérica con la ruta especificada
 }
 void verificarRespuestaPulsadores() {
   unsigned long tiempoActual = millis(); // Obtiene el tiempo actual
@@ -347,54 +359,78 @@ void reproducirAudio(const char *ruta) {
  * y los reproduce en secuencia.
  */
 void reproducirModoPicante() {
+  // Inicia un bucle que se repetirá para cada archivo picante en la sesión
   for (int i = 0; i < archivosPicantesPorSesion; i++) {
-    int numeroArchivo = random(1, totalArchivosPicantes + 1); // Genera un número aleatorio entre 1 y totalArchivosPicantes
-    char ruta[20];
+    // Genera un número aleatorio entre 1 y totalArchivosPicantes
+    int numeroArchivo = random(1, totalArchivosPicantes + 1); 
+    char ruta[20]; // Declara un arreglo de caracteres para almacenar la ruta del archivo
+    // Formatea la ruta del archivo de audio picante usando el número aleatorio generado
     snprintf(ruta, sizeof(ruta), "/picante%d.mp3", numeroArchivo);
+    // Llama a la función para reproducir el audio en la ruta especificada
     reproducirAudio(ruta);
+    // Mientras el reproductor de mp3 esté en funcionamiento
     while (mp3->isRunning()) {
-      if (!mp3->loop()) break;
+      // Intenta hacer un bucle en la reproducción del audio
+      if (!mp3->loop()) break; // Si no se puede hacer el bucle, sale del bucle
     }
   }
 }
+
 /**
  * @brief Reordena aleatoriamente las preguntas, respuestas y casas
+ * En este código, la función reordenarPreguntas se encarga de mezclar las preguntas, respuestas y casas de manera aleatoria. Cada sección del código tiene comentarios que explican el propósito de cada línea.
+ * Iteración: Se recorre cada pregunta desde 0 hasta el total de preguntas.
+ * Índice Aleatorio: Se genera un índice aleatorio j que se utiliza para intercambiar elementos.
+ * Intercambio de Archivos de Preguntas: Se intercambian los archivos de preguntas entre la posición actual y la posición aleatoria.
+ * Intercambio de Respuestas Correctas: Se realiza un intercambio similar para las respuestas correctas.
+ * Intercambio de Casas: Finalmente, se intercambian las casas asociadas a cada pregunta.
+ * Cada comentario proporciona claridad sobre lo que está sucediendo en el código, facilitando su comprensión y mantenimiento.
  */
 void reordenarPreguntas() {
+  // Iterar a través de todas las preguntas
   for (int i = 0; i < totalPreguntas; i++) {
+    // Generar un índice aleatorio entre i y totalPreguntas
     int j = random(i, totalPreguntas);
     
     // Intercambiar archivos de preguntas
-    char* temp = archivosPreguntas_aleatorio[i];
-    archivosPreguntas_aleatorio[i] = archivosPreguntas_aleatorio[j];
-    archivosPreguntas_aleatorio[j] = temp;
+    char* temp = archivosPreguntas_aleatorio[i]; // Guardar temporalmente el archivo de la pregunta actual
+    archivosPreguntas_aleatorio[i] = archivosPreguntas_aleatorio[j]; // Asignar el archivo de la pregunta aleatoria a la posición actual
+    archivosPreguntas_aleatorio[j] = temp; // Colocar el archivo guardado en la posición aleatoria
     
     // Intercambiar respuestas correctas
-    bool tempBool = respuestasCorrectas_aleatorio[i];
-    respuestasCorrectas_aleatorio[i] = respuestasCorrectas_aleatorio[j];
-    respuestasCorrectas_aleatorio[j] = tempBool;
+    bool tempBool = respuestasCorrectas_aleatorio[i]; // Guardar temporalmente la respuesta correcta de la pregunta actual
+    respuestasCorrectas_aleatorio[i] = respuestasCorrectas_aleatorio[j]; // Asignar la respuesta correcta de la pregunta aleatoria a la posición actual
+    respuestasCorrectas_aleatorio[j] = tempBool; // Colocar la respuesta guardada en la posición aleatoria
     
     // Intercambiar casas por pregunta
-    int tempInt = casasPorPregunta_aleatorio[i];
-    casasPorPregunta_aleatorio[i] = casasPorPregunta_aleatorio[j];
-    casasPorPregunta_aleatorio[j] = tempInt;
+    int tempInt = casasPorPregunta_aleatorio[i]; // Guardar temporalmente la casa de la pregunta actual
+    casasPorPregunta_aleatorio[i] = casasPorPregunta_aleatorio[j]; // Asignar la casa de la pregunta aleatoria a la posición actual
+    casasPorPregunta_aleatorio[j] = tempInt; // Colocar la casa guardada en la posición aleatoria
   }
 }
+
 const char *obtenerResultadoFinal() {
-  int puntajesMaximos[4] = {puntajeGryffindor, puntajeSlytherin, puntajeRavenclaw, puntajeHufflepuff}; // Arreglo con los puntajes de todas las casas
-  int casaGanadora = 0; // Índice de la casa ganadora
-  int segundoLugar = 0; // Índice de la casa en segundo lugar
-  int contadorEmpates = 0; // Contador de empates
+  // Arreglo con los puntajes de todas las casas
+  int puntajesMaximos[4] = {puntajeGryffindor, puntajeSlytherin, puntajeRavenclaw, puntajeHufflepuff}; 
+  // Índice de la casa ganadora
+  int casaGanadora = 0; 
+  // Índice de la casa en segundo lugar
+  int segundoLugar = 0; 
+  // Contador de empates
+  int contadorEmpates = 0; 
 
   // Encontrar la casa con mayor puntaje y contar empates
   for (int i = 1; i < 4; i++) {
+    // Si el puntaje actual es mayor que el de la casa ganadora
     if (puntajesMaximos[i] > puntajesMaximos[casaGanadora]) {
-      segundoLugar = casaGanadora;
-      casaGanadora = i;
-      contadorEmpates = 0;
-    } else if (puntajesMaximos[i] == puntajesMaximos[casaGanadora]) {
-      segundoLugar = i;
-      contadorEmpates++;
+      segundoLugar = casaGanadora; // Actualizar segundo lugar
+      casaGanadora = i; // Actualizar casa ganadora
+      contadorEmpates = 0; // Reiniciar contador de empates
+    } 
+    // Si hay un empate con la casa ganadora
+    else if (puntajesMaximos[i] == puntajesMaximos[casaGanadora]) {
+      segundoLugar = i; // Actualizar segundo lugar al actual
+      contadorEmpates++; // Incrementar contador de empates
     }
   }
 
@@ -402,41 +438,44 @@ const char *obtenerResultadoFinal() {
   if (contadorEmpates >= 2) {
     LedPWM(128, 0, 128); // Color púrpura para Muggles
     return "/muggle.mp3"; // Archivo de audio para Muggles
-  } else if (contadorEmpates == 1) {
-    casaGanadora = random(2) == 0 ? casaGanadora : segundoLugar; // Elegir aleatoriamente entre las dos casas empatadas
+  } 
+  // Si hay un empate entre dos casas
+  else if (contadorEmpates == 1) {
+    // Elegir aleatoriamente entre las dos casas empatadas
+    casaGanadora = random(2) == 0 ? casaGanadora : segundoLugar; 
   }
 
   // Asignar color y archivo de audio según la casa ganadora
   switch (casaGanadora) {
     case 0:
       LedPWM(255, 0, 0); // Rojo para Gryffindor
-      return "/gryffindor.mp3";
+      return "/gryffindor.mp3"; // Retornar archivo de audio de Gryffindor
     case 1:
       LedPWM(0, 255, 0); // Verde para Slytherin
-      return "/slytherin.mp3";
+      return "/slytherin.mp3"; // Retornar archivo de audio de Slytherin
     case 2:
       LedPWM(0, 0, 255); // Azul para Ravenclaw
-      return "/ravenclaw.mp3";
+      return "/ravenclaw.mp3"; // Retornar archivo de audio de Ravenclaw
     case 3:
       LedPWM(255, 255, 0); // Amarillo para Hufflepuff
-      return "/hufflepuff.mp3";
+      return "/hufflepuff.mp3"; // Retornar archivo de audio de Hufflepuff
     default:
       LedPWM(0, 0, 0); // Apagar LED en caso de error
-      return "/error.mp3";
+      return "/error.mp3"; // Retornar archivo de audio de error
   }
 }
 
 
 void configurarLED() {
-  // Configurar los canales LEDC
-  ledcSetup(CANAL_LEDC_0, FRECUENCIA_BASE_LEDC, LEDC_TIMER_8_BIT);
-  ledcSetup(CANAL_LEDC_1, FRECUENCIA_BASE_LEDC, LEDC_TIMER_8_BIT);
-  ledcSetup(CANAL_LEDC_2, FRECUENCIA_BASE_LEDC, LEDC_TIMER_8_BIT);
+  // Configurar los canales LEDC con la frecuencia y resolución especificadas
+  ledcSetup(CANAL_LEDC_0, FRECUENCIA_BASE_LEDC, LEDC_TIMER_8_BIT); // Configura el canal 0
+  ledcSetup(CANAL_LEDC_1, FRECUENCIA_BASE_LEDC, LEDC_TIMER_8_BIT); // Configura el canal 1
+  ledcSetup(CANAL_LEDC_2, FRECUENCIA_BASE_LEDC, LEDC_TIMER_8_BIT); // Configura el canal 2
   
-  // Asociar los pines GPIO con los canales LEDC
-  ledcAttachPin(PIN_LED_ROJO, CANAL_LEDC_0);
-  ledcAttachPin(PIN_LED_VERDE, CANAL_LEDC_1);
-  ledcAttachPin(PIN_LED_AZUL, CANAL_LEDC_2);
+  // Asociar los pines GPIO con los canales LEDC para controlar los LEDs
+  ledcAttachPin(PIN_LED_ROJO, CANAL_LEDC_0); // Asocia el pin del LED rojo al canal 0
+  ledcAttachPin(PIN_LED_VERDE, CANAL_LEDC_1); // Asocia el pin del LED verde al canal 1
+  ledcAttachPin(PIN_LED_AZUL, CANAL_LEDC_2); // Asocia el pin del LED azul al canal 2
 }
 
 /**
@@ -486,24 +525,28 @@ void initOTA() {
  * @brief Mueve el servo de la cúspide
  */
 void moverServoCuspide() {
-  unsigned long tiempoActual = millis();
+  unsigned long tiempoActual = millis(); // Captura el tiempo actual en milisegundos
+  // Verifica si ha pasado el intervalo necesario desde el último movimiento
   if (tiempoActual - ultimoMovimientoCuspide >= intervaloMovimientoCuspide) {
     int posicion = random(70, 111); // Genera una posición aleatoria entre 70 y 110 grados
-    servoCuspide.write(posicion);
-    ultimoMovimientoCuspide = tiempoActual;
+    servoCuspide.write(posicion); // Mueve el servo a la posición generada
+    ultimoMovimientoCuspide = tiempoActual; // Actualiza el tiempo del último movimiento
   }
 }
+
 /**
  * @brief Mueve el servo de la boca
  */
 void moverServoBoca() {
-  unsigned long tiempoActual = millis();
+  unsigned long tiempoActual = millis(); // Captura el tiempo actual en milisegundos
+  // Verifica si ha pasado el intervalo necesario desde el último movimiento
   if (tiempoActual - ultimoMovimientoBoca >= intervaloMovimientoBoca) {
     int posicion = random(80, 101); // Genera una posición aleatoria entre 80 y 100 grados
-    servoBoca.write(posicion);
-    ultimoMovimientoBoca = tiempoActual;
+    servoBoca.write(posicion); // Mueve el servo a la posición generada
+    ultimoMovimientoBoca = tiempoActual; // Actualiza el tiempo del último movimiento
   }
 }
+
 
 /**
  * @brief Graba el resultado del juego en un archivo CSV.
@@ -512,18 +555,56 @@ void moverServoBoca() {
  * con los puntajes finales de cada casa.
  */
 void grabarResultadoCSV() {
-  File archivo = SD.open("/resultados.csv", FILE_APPEND);
+  const char* nombreArchivo = "/resultados.csv"; // Definimos el nombre del archivo CSV
+  File archivo = SD.open(nombreArchivo, FILE_READ); // Intentamos abrir el archivo en modo lectura
+  bool archivoExiste = archivo; // Verificamos si el archivo se abrió correctamente
+  archivo.close(); // Cerramos el archivo después de la verificación
+
+  if (!archivoExiste) {
+    // Si el archivo no existe, lo creamos y añadimos el encabezado
+    archivo = SD.open(nombreArchivo, FILE_WRITE); // Abrimos el archivo en modo escritura
+    if (archivo) {
+      archivo.println("Gryffindor,Slytherin,Ravenclaw,Hufflepuff"); // Escribimos el encabezado en el archivo
+      archivo.close(); // Cerramos el archivo después de escribir
+      Serial.println("Archivo CSV creado con encabezado"); // Mensaje de confirmación en el monitor serial
+    } else {
+      Serial.println("Error al crear el archivo CSV"); // Mensaje de error si no se pudo crear el archivo
+      return; // Salimos de la función si hubo un error
+    }
+  }
+
+  // Abrimos el archivo en modo de añadir
+  archivo = SD.open(nombreArchivo, FILE_APPEND); // Abrimos el archivo en modo añadir
   if (archivo) {
-    archivo.print(puntajeGryffindor);
-    archivo.print(",");
-    archivo.print(puntajeSlytherin);
-    archivo.print(",");
-    archivo.print(puntajeRavenclaw);
-    archivo.print(",");
-    archivo.println(puntajeHufflepuff);
-    archivo.close();
-    Serial.println("Resultado grabado en CSV"); // Mensaje de confirmación
+    // Obtenemos la fecha y hora actual (asumiendo que tienes un RTC configurado)
+   // DateTime now = rtc.now(); // Obtenemos la fecha y hora actual del RTC
+
+    // Escribimos los datos
+    archivo.print(puntajeGryffindor); // Escribimos el puntaje de Gryffindor
+    archivo.print(","); // Añadimos una coma como separador
+    archivo.print(puntajeSlytherin); // Escribimos el puntaje de Slytherin
+    archivo.print(","); // Añadimos una coma como separador
+    archivo.print(puntajeRavenclaw); // Escribimos el puntaje de Ravenclaw
+    archivo.print(","); // Añadimos una coma como separador
+    archivo.print(puntajeHufflepuff); // Escribimos el puntaje de Hufflepuff
+    archivo.print(","); // Añadimos una coma como separador
+    /*
+    // Añadimos la fecha y hora
+    archivo.print(now.year()); // Escribimos el año actual
+    archivo.print("/"); // Añadimos una barra como separador
+    archivo.print(now.month()); // Escribimos el mes actual
+    archivo.print("/"); // Añadimos una barra como separador
+    archivo.print(now.day()); // Escribimos el día actual
+    archivo.print(","); // Añadimos una coma como separador
+    archivo.print(now.hour()); // Escribimos la hora actual
+    archivo.print(":"); // Añadimos dos puntos como separador
+    archivo.print(now.minute()); // Escribimos los minutos actuales
+    archivo.print(":"); // Añadimos dos puntos como separador
+    archivo.println(now.second()); // Escribimos los segundos actuales y añadimos una nueva línea
+*/
+    archivo.close(); // Cerramos el archivo después de escribir
+    Serial.println("Resultado grabado en CSV"); // Mensaje de confirmación en el monitor serial
   } else {
-    Serial.println("Error al abrir el archivo CSV"); // Mensaje de error
+    Serial.println("Error al abrir el archivo CSV para escribir"); // Mensaje de error si no se pudo abrir el archivo
   }
 }
