@@ -1,6 +1,7 @@
-const char *version = "4.01"; // Versión del programa 
+const char *version = "4.03"; // Versión del programa 
 // Se realiza cambio a verificación por pulsadores estándar y se agregan servomotores
 // Se modifica el sistema de puntuación para ser más equitativo entre las casas
+// Se agrega modo picante y grabación de resultados en CSV
 
 #include "AudioFileSourceSD.h"   // Biblioteca para fuente de audio desde la tarjeta SD
 #include "AudioGeneratorMP3.h"   // Biblioteca para generar audio MP3
@@ -27,6 +28,7 @@ const char *password = ""; // Contraseña de la red WiFi
 // Pines para los pulsadores (ahora activos en bajo)
 #define PIN_SI 4  // GPIO 4 - Pin para "Sí"
 #define PIN_NO 15 // GPIO 15 - Pin para "No"
+#define PIN_PICANTE 34 // GPIO 34 - Pin para modo picante
 
 // Pines para los servomotores
 #define PIN_SERVO_CUSPIDE 13 // Pin para el servomotor de la cúspide
@@ -53,8 +55,10 @@ bool pulsadorPresionado = false; // Bandera para verificar si se presionó algú
 // Variables para el estado de los pulsadores y manejo del debounce
 bool pulsadorSiPresionado = false; // Variable para el estado del pulsador "Sí"
 bool pulsadorNoPresionado = false; // Variable para el estado del pulsador "No"
+bool pulsadorPicantePresionado = false; // Variable para el estado del pulsador "Picante"
 unsigned long ultimoTiempoSi = 0;  // Tiempo de la última lectura del pulsador "Sí"
 unsigned long ultimoTiempoNo = 0;  // Tiempo de la última lectura del pulsador "No"
+unsigned long ultimoTiempoPicante = 0; // Tiempo de la última lectura del pulsador "Picante"
 const unsigned long debounceDelay = 120; // Tiempo de espera para el debounce en milisegundos
 
 #define PWM_PIN 12 // GPIO 12 - Pin para la salida PWM
@@ -86,7 +90,7 @@ int puntajeRavenclaw = 0; // Puntaje para Ravenclaw
 int puntajeHufflepuff = 0; // Puntaje para Hufflepuff
 
 // Arreglo de respuestas correctas (true para Sí, false para No)
-const bool respuestasCorrectas[8] = {true, false, true, false, true, false, true, false}; // Respuestas correctas para cada pregunta
+const bool respuestasCorrectas[totalPreguntas] = {true, false, true, false, true, false, true, false}; // Respuestas correctas para cada pregunta
 /*Este arreglo tiene 8 elementos, uno para cada pregunta del juego (recordemos que totalPreguntas = 8).
 
 Ahora, veamos algunos ejemplos de cómo funciona esto en la práctica:
@@ -117,9 +121,18 @@ Si el jugador presiona el botón "No", obtendrá puntos.
 Si el jugador presiona el botón "Sí", no obtendrá puntos.
 En el código, cuando el jugador responde a una pregunta, se compara su respuesta con la respuesta correcta almacenada en respuestasCorrectas. Esto se hace en la función verificarRespuestaPulsadores():
 */
-
 // Arreglo de casas correspondientes a cada pregunta
-const int casasPorPregunta[8] = {0, 1, 2, 3, 0, 1, 2, 3}; // 0: Gryffindor, 1: Slytherin, 2: Ravenclaw, 3: Hufflepuff
+const int casasPorPregunta[totalPreguntas] = {0, 1, 2, 3, 0, 1, 2, 3}; // 0: Gryffindor, 1: Slytherin, 2: Ravenclaw, 3: Hufflepuff
+
+// Arreglos para almacenar el orden aleatorio
+char* archivosPreguntas_aleatorio[totalPreguntas];
+bool respuestasCorrectas_aleatorio[totalPreguntas];
+int casasPorPregunta_aleatorio[totalPreguntas];
+
+// Variables para el modo picante
+bool modoPicanteActivado = false; // Bandera para indicar si el modo picante está activado
+const int totalArchivosPicantes = 10; // Número total de archivos picantes disponibles
+const int archivosPicantesPorSesion = 3; // Número de archivos picantes a reproducir por sesión
 
 /**
  * @brief Configura los componentes iniciales del sistema.
@@ -138,9 +151,13 @@ void setup() {
     return;
   }
 
+  randomSeed(analogRead(0)); // Inicializa la semilla aleatoria
+  reordenarPreguntas(); // Reordena las preguntas al inicio
+
   // Configura los pines de los pulsadores como entradas con pull-up
   pinMode(PIN_SI, INPUT_PULLUP);
   pinMode(PIN_NO, INPUT_PULLUP);
+  pinMode(PIN_PICANTE, INPUT_PULLUP); // Configura el pin del modo picante
   
   // Configura los timers para los servomotores
   ESP32PWM::allocateTimer(0);
@@ -150,11 +167,6 @@ void setup() {
   servoCuspide.attach(PIN_SERVO_CUSPIDE, 500, 2400);
   servoBoca.attach(PIN_SERVO_BOCA, 500, 2400);
 
-  /* Configura los pines LED como salidas
-  pinMode(PIN_LED_R, OUTPUT);
-  pinMode(PIN_LED_G, OUTPUT);
-  pinMode(PIN_LED_B, OUTPUT);
-  */
   configurarLED();
 
   // Inicializa los componentes de audio
@@ -202,7 +214,10 @@ void loop() {
       pulsadorPresionado = false;
       Serial.println("Puntajes: G:" + String(puntajeGryffindor) + " S:" + String(puntajeSlytherin) + " R:" + String(puntajeRavenclaw) + " H:" + String(puntajeHufflepuff));
 
-      if (aleatoreaReproducida) {
+      if (modoPicanteActivado) {
+        reproducirModoPicante(); // Reproduce el modo picante
+        modoPicanteActivado = false; // Desactiva el modo picante después de reproducirlo
+      } else if (aleatoreaReproducida) {
         if (preguntaActual <= totalPreguntas) {
           Serial.print("Llamado a pregunta: ");
           Serial.println(preguntaActual);
@@ -213,6 +228,7 @@ void loop() {
           Serial.print("Resultado final: ");
           Serial.println(archivoResultado);
           reproducirAudio(archivoResultado);
+          grabarResultadoCSV(); // Graba el resultado en el archivo CSV
         }
       } else {
         reproducirRespuestaAleatoria();
@@ -220,8 +236,13 @@ void loop() {
       }
     }
   }
+
+  // Verifica si se presionó el botón de modo picante
+  if (digitalRead(PIN_PICANTE) == LOW && !modoPicanteActivado) {
+    modoPicanteActivado = true;
+    pulsadorPresionado = true;
+  }
 }
-// -------------------------------------------------------------------------------Fin loop----------------------------------
 //-------------------------------------------------------------------------------------------Reproducciones-----------
 void reproducirIntroduccion() {
   const char *archivoIntroduccion = "/intro.mp3"; // Ruta del archivo de introducción
@@ -239,7 +260,6 @@ void reproducirIntroduccion() {
   aleatoreaReproducida = true; // Marca que se reprodujo una respuesta aleatoria
   return;
 }
-
 void reproducirPregunta(int numeroPregunta) {
   Serial.print("Pregunta a reproducir:");
   Serial.println(numeroPregunta);
@@ -249,7 +269,6 @@ void reproducirPregunta(int numeroPregunta) {
   Serial.println(ruta);
   reproducirAudio(ruta); // Llama a la función de reproducción de audio genérica
 }
-
 void reproducirRespuestaAleatoria() {
   char ruta[15];
   int numeroRespuesta = random(1, 22); // Genera un número aleatorio entre 1 y 22
@@ -260,37 +279,6 @@ void reproducirRespuestaAleatoria() {
   reproducirAudio(ruta); // Llama a la función de reproducción de audio genérica
   pulsadorPresionado = true;
 }
-
-void reproducirResultadoFinal() {
-  const char *archivoResultado = obtenerResultadoFinal(); // Obtiene la ruta del archivo de resultado final
-  reproducirAudio(archivoResultado); // Llama a la función de reproducción de audio genérica
-}
-
-void reproducirAudio(const char *ruta) {
-  if (!SD.exists(ruta)) { // Verifica si el archivo existe en la tarjeta SD
-    Serial.println("Archivo no encontrado"); // Mensaje de error si el archivo no existe
-    return; // Termina la función si el archivo no existe
-  }
-
-  if (!fuente->open(ruta)) { // Abre el archivo de audio
-    Serial.println("Error al abrir el archivo"); // Mensaje de error si no se puede abrir el archivo
-    return; // Termina la función si no se puede abrir el archivo
-  }
-
-  yield(); // Pasa el control a otras tareas
-  mp3->begin(fuente, salida); // Inicia la reproducción del audio
-  yaReprodujo = true; // Marca que se está reproduciendo un audio
-  
-  // Mueve los servomotores mientras se reproduce el audio
-       moverServoCuspide();
-      moverServoBoca();
-}
-/**
- * @brief Verifica las respuestas de los pulsadores y actualiza los puntajes.
- * 
- * Esta función lee el estado de los pulsadores, maneja el debounce, y actualiza
- * los puntajes de las casas según las respuestas dadas.
- */
 void verificarRespuestaPulsadores() {
   unsigned long tiempoActual = millis(); // Obtiene el tiempo actual
 
@@ -333,15 +321,65 @@ void verificarRespuestaPulsadores() {
     pulsadorNoPresionado = false;
   }
 }
+void reproducirAudio(const char *ruta) {
+  if (!SD.exists(ruta)) { // Verifica si el archivo existe en la tarjeta SD
+    Serial.println("Archivo no encontrado"); // Mensaje de error si el archivo no existe
+    return; // Termina la función si el archivo no existe
+  }
 
+  if (!fuente->open(ruta)) { // Abre el archivo de audio
+    Serial.println("Error al abrir el archivo"); // Mensaje de error si no se puede abrir el archivo
+    return; // Termina la función si no se puede abrir el archivo
+  }
+
+  yield(); // Pasa el control a otras tareas
+  mp3->begin(fuente, salida); // Inicia la reproducción del audio
+  yaReprodujo = true; // Marca que se está reproduciendo un audio
+  
+  // Mueve los servomotores mientras se reproduce el audio
+       moverServoCuspide();
+      moverServoBoca();
+}
 /**
- * @brief Determina el resultado final del juego y devuelve el archivo de audio correspondiente.
+ * @brief Reproduce el modo picante.
  * 
- * Esta función compara los puntajes de las casas, maneja empates y devuelve el nombre
- * del archivo de audio para el resultado final.
- * 
- * @return const char* Nombre del archivo de audio para el resultado final.
+ * Esta función selecciona aleatoriamente 3 archivos de audio picantes
+ * y los reproduce en secuencia.
  */
+void reproducirModoPicante() {
+  for (int i = 0; i < archivosPicantesPorSesion; i++) {
+    int numeroArchivo = random(1, totalArchivosPicantes + 1); // Genera un número aleatorio entre 1 y totalArchivosPicantes
+    char ruta[20];
+    snprintf(ruta, sizeof(ruta), "/picante%d.mp3", numeroArchivo);
+    reproducirAudio(ruta);
+    while (mp3->isRunning()) {
+      if (!mp3->loop()) break;
+    }
+  }
+}
+/**
+ * @brief Reordena aleatoriamente las preguntas, respuestas y casas
+ */
+void reordenarPreguntas() {
+  for (int i = 0; i < totalPreguntas; i++) {
+    int j = random(i, totalPreguntas);
+    
+    // Intercambiar archivos de preguntas
+    char* temp = archivosPreguntas_aleatorio[i];
+    archivosPreguntas_aleatorio[i] = archivosPreguntas_aleatorio[j];
+    archivosPreguntas_aleatorio[j] = temp;
+    
+    // Intercambiar respuestas correctas
+    bool tempBool = respuestasCorrectas_aleatorio[i];
+    respuestasCorrectas_aleatorio[i] = respuestasCorrectas_aleatorio[j];
+    respuestasCorrectas_aleatorio[j] = tempBool;
+    
+    // Intercambiar casas por pregunta
+    int tempInt = casasPorPregunta_aleatorio[i];
+    casasPorPregunta_aleatorio[i] = casasPorPregunta_aleatorio[j];
+    casasPorPregunta_aleatorio[j] = tempInt;
+  }
+}
 const char *obtenerResultadoFinal() {
   int puntajesMaximos[4] = {puntajeGryffindor, puntajeSlytherin, puntajeRavenclaw, puntajeHufflepuff}; // Arreglo con los puntajes de todas las casas
   int casaGanadora = 0; // Índice de la casa ganadora
@@ -388,12 +426,7 @@ const char *obtenerResultadoFinal() {
   }
 }
 
-/**
- * @brief Configura los canales LEDC para el control de LED RGB.
- * 
- * Esta función inicializa tres canales LEDC y los asocia con los pines GPIO
- * correspondientes a los LEDs rojo, verde y azul. Debe ser llamada en setup().
- */
+
 void configurarLED() {
   // Configurar los canales LEDC
   ledcSetup(CANAL_LEDC_0, FRECUENCIA_BASE_LEDC, LEDC_TIMER_8_BIT);
@@ -434,79 +467,63 @@ void LedPWM(int rojo, int verde, int azul) {
   ledcWrite(CANAL_LEDC_1, verde);
   ledcWrite(CANAL_LEDC_2, azul);
 }
-
 /**
- * @brief Controla el movimiento del servomotor de la cúspide.
- *
- * Esta función mueve el servomotor de la cúspide a una posición aleatoria
- * en intervalos regulares.
+ * @brief Inicializa la configuración OTA
+ */
+void initOTA() {
+  WiFi.mode(WIFI_STA);
+  WiFi.begin(ssid, password);
+  while (WiFi.waitForConnectResult() != WL_CONNECTED) {
+    Serial.println("Conexión fallida! Reiniciando...");
+    delay(5000);
+    ESP.restart();
+  }
+
+  ArduinoOTA.setHostname("ESP32-Sombrero");
+  ArduinoOTA.begin();
+}
+/**
+ * @brief Mueve el servo de la cúspide
  */
 void moverServoCuspide() {
   unsigned long tiempoActual = millis();
-  if (tiempoActual - ultimoMovimientoCuspide > intervaloMovimientoCuspide) {
-    int posicion = random(60, 121); // Posición aleatoria entre 60 y 120 grados
+  if (tiempoActual - ultimoMovimientoCuspide >= intervaloMovimientoCuspide) {
+    int posicion = random(70, 111); // Genera una posición aleatoria entre 70 y 110 grados
     servoCuspide.write(posicion);
     ultimoMovimientoCuspide = tiempoActual;
   }
 }
-
 /**
- * @brief Controla el movimiento del servomotor de la boca.
- *
- * Esta función mueve el servomotor de la boca a una posición aleatoria
- * en intervalos regulares.
+ * @brief Mueve el servo de la boca
  */
 void moverServoBoca() {
   unsigned long tiempoActual = millis();
-  if (tiempoActual - ultimoMovimientoBoca > intervaloMovimientoBoca) {
-    int posicion = random(60, 121); // Posición aleatoria entre 60 y 120 grados
+  if (tiempoActual - ultimoMovimientoBoca >= intervaloMovimientoBoca) {
+    int posicion = random(80, 101); // Genera una posición aleatoria entre 80 y 100 grados
     servoBoca.write(posicion);
     ultimoMovimientoBoca = tiempoActual;
   }
 }
-// -------------------------------------------------------------------------------------------OTA--------------------------------------------------------------------
-void initOTA() {
-  WiFi.begin(ssid, password); // Conecta a la red WiFi
-  while (WiFi.status() != WL_CONNECTED) { // Espera hasta que la conexión se establezca
-    delay(500); // Espera medio segundo antes de intentar nuevamente
-    Serial.println("Conectando a WiFi..."); // Mensaje de conexión a WiFi
+
+/**
+ * @brief Graba el resultado del juego en un archivo CSV.
+ * 
+ * Esta función crea o actualiza un archivo CSV en la tarjeta SD
+ * con los puntajes finales de cada casa.
+ */
+void grabarResultadoCSV() {
+  File archivo = SD.open("/resultados.csv", FILE_APPEND);
+  if (archivo) {
+    archivo.print(puntajeGryffindor);
+    archivo.print(",");
+    archivo.print(puntajeSlytherin);
+    archivo.print(",");
+    archivo.print(puntajeRavenclaw);
+    archivo.print(",");
+    archivo.println(puntajeHufflepuff);
+    archivo.close();
+    Serial.println("Resultado grabado en CSV"); // Mensaje de confirmación
+  } else {
+    Serial.println("Error al abrir el archivo CSV"); // Mensaje de error
   }
-  Serial.println("Conectado a la red WiFi"); // Mensaje de conexión exitosa
-
-  // Configura los eventos de OTA
-  ArduinoOTA.onStart([]() {
-    String tipo;
-    if (ArduinoOTA.getCommand() == U_FLASH) {
-      tipo = "sketch"; // Actualización de sketch
-    } else {
-      tipo = "filesystem"; // Actualización de sistema de archivos
-    }
-    Serial.println("Inicio de actualización OTA: " + tipo);
-  });
-
-  ArduinoOTA.onEnd([]() {
-    Serial.println("\nFin de la actualización OTA"); // Mensaje al finalizar la actualización
-  });
-
-  ArduinoOTA.onProgress([](unsigned int progreso, unsigned int total) {
-    Serial.printf("Progreso: %u%%\r", (progreso / (total / 100))); // Mensaje de progreso de la actualización
-  });
-
-  ArduinoOTA.onError([](ota_error_t error) {
-    Serial.printf("Error [%u]: ", error); // Mensaje de error con código
-    if (error == OTA_AUTH_ERROR) {
-      Serial.println("Error de autenticación"); // Error de autenticación
-    } else if (error == OTA_BEGIN_ERROR) {
-      Serial.println("Error de inicio"); // Error al iniciar
-    } else if (error == OTA_CONNECT_ERROR) {
-      Serial.println("Error de conexión"); // Error de conexión
-    } else if (error == OTA_RECEIVE_ERROR) {
-      Serial.println("Error de recepción"); // Error de recepción
-    } else if (error == OTA_END_ERROR) {
-      Serial.println("Error de finalización"); // Error de finalización
-    }
-  });
-
-  ArduinoOTA.begin(); // Inicia el servicio OTA
-  Serial.println("Listo para actualización OTA"); // Mensaje de preparación para OTA
 }
