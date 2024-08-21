@@ -20,6 +20,7 @@ const char *ssid = "";     // Nombre de la red WiFi
 const char *password = ""; // Contraseña de la red WiFi
 
 // Pines del Bus SPI para la conexión de la Tarjeta SD
+//https://i.pinimg.com/originals/3d/77/08/3d7708bde218b254894590fe2eb97ab2.jpg
 #define SCK 18   // Pin de reloj para SPI
 #define MISO 19  // Pin de salida de datos para SPI
 #define MOSI 23  // Pin de entrada de datos para SPI
@@ -28,7 +29,7 @@ const char *password = ""; // Contraseña de la red WiFi
 // Pines para los pulsadores (ahora activos en bajo)
 #define PIN_SI 4  // GPIO 4 - Pin para "Sí"
 #define PIN_NO 15 // GPIO 15 - Pin para "No"
-#define PIN_PICANTE 34 // GPIO 34 - Pin para modo picante
+#define PIN_PICANTE 9 // GPIO 9 - Pin para modo picante
 
 // Pines para los servomotores
 #define PIN_SERVO_CUSPIDE 13 // Pin para el servomotor de la cúspide
@@ -244,16 +245,10 @@ void loop() {
       } else {
         reproducirRespuestaAleatoria(); // Reproduce una respuesta aleatoria
         aleatoreaReproducida = true; // Marca que se ha reproducido una respuesta aleatoria
-      }
-    }
-  }
-
-  // Verifica si se presionó el botón de modo picante
-  if (digitalRead(PIN_PICANTE) == LOW && !modoPicanteActivado) {
-    modoPicanteActivado = true;
-    pulsadorPresionado = true;
-  }
-}
+      } //fin elese
+    } // fin if pulsador presionado
+  } // fin else
+} // fin loop
 //-------------------------------------------------------------------------------------------Reproducciones-----------
 void reproducirIntroduccion() {
   const char *archivoIntroduccion = "/intro.mp3"; // Ruta del archivo de introducción
@@ -270,7 +265,7 @@ void reproducirIntroduccion() {
   }
   aleatoreaReproducida = true; // Marca que se reprodujo una respuesta aleatoria
   return;
-  }
+ } //fin re`producirIntroduccion
 void reproducirRespuestaAleatoria() {
   char ruta[15];
   int numeroRespuesta = random(1, 22); // Genera un número aleatorio entre 1 y 22
@@ -283,11 +278,11 @@ void reproducirRespuestaAleatoria() {
 }
 
 void reproducirPregunta(int numeroPregunta) {
-  Serial.print("Pregunta a reproducir:"); // Imprime un mensaje en el monitor serial
+  Serial.print("Pregunta a reproducir: "); // Imprime un mensaje en el monitor serial
   Serial.println(numeroPregunta); // Imprime el número de la pregunta a reproducir
   char ruta[15]; // Declara un arreglo de caracteres para almacenar la ruta del archivo
   snprintf(ruta, sizeof(ruta), "/%s", archivosPreguntas[numeroPregunta]); // Formatea la ruta del archivo de audio de la pregunta
-  Serial.print("Ruta y archivo a reproducir:"); // Imprime un mensaje en el monitor serial sobre la ruta
+  Serial.print("Ruta y archivo a reproducir: "); // Imprime un mensaje en el monitor serial sobre la ruta
   Serial.println(ruta); // Imprime la ruta del archivo que se va a reproducir
   reproducirAudio(ruta); // Llama a la función de reproducción de audio genérica con la ruta especificada
 }
@@ -296,7 +291,7 @@ void verificarRespuestaPulsadores() {
 
   int lecturaSi = digitalRead(PIN_SI); // Lee el estado del pulsador "Sí"
   int lecturaNo = digitalRead(PIN_NO); // Lee el estado del pulsador "No"
-
+  int lecturaPicante = digitalRead(PIN_PICANTE); // Lee el estado del pulsador "modo Picante"
   // Maneja el pulsador "Sí"
   if (lecturaSi == LOW && !pulsadorSiPresionado && (tiempoActual - ultimoTiempoSi > debounceDelay)) {
     pulsadorSiPresionado = true;
@@ -332,10 +327,19 @@ void verificarRespuestaPulsadores() {
   } else if (lecturaNo == HIGH) {
     pulsadorNoPresionado = false;
   }
+    // Verifica si se presionó el botón de modo picante
+  if ( lecturaPicante == LOW && !modoPicanteActivado) {
+    modoPicanteActivado = true;
+    pulsadorPresionado = true;
+  }
+  // Maneja OTA si está habilitado, de lo contrario cede el control
+  OTAhabilitado ? ArduinoOTA.handle() : yield(); 
+
 }
 void reproducirAudio(const char *ruta) {
   if (!SD.exists(ruta)) { // Verifica si el archivo existe en la tarjeta SD
-    Serial.println("Archivo no encontrado"); // Mensaje de error si el archivo no existe
+    Serial.print("Archivo no encontrado: "); // Mensaje de error si el archivo no existe
+    Serial.println(ruta);
     return; // Termina la función si el archivo no existe
   }
 
@@ -364,10 +368,8 @@ void reproducirModoPicante() {
     // Genera un número aleatorio entre 1 y totalArchivosPicantes
     int numeroArchivo = random(1, totalArchivosPicantes + 1); 
     char ruta[20]; // Declara un arreglo de caracteres para almacenar la ruta del archivo
-    // Formatea la ruta del archivo de audio picante usando el número aleatorio generado
-    snprintf(ruta, sizeof(ruta), "/picante%d.mp3", numeroArchivo);
-    // Llama a la función para reproducir el audio en la ruta especificada
-    reproducirAudio(ruta);
+     snprintf(ruta, sizeof(ruta), "/picante%d.mp3", numeroArchivo);// Formatea la ruta del archivo de audio picante usando el número aleatorio generado
+     reproducirAudio(ruta);// Llama a la función para reproducir el audio en la ruta especificada
     // Mientras el reproductor de mp3 esté en funcionamiento
     while (mp3->isRunning()) {
       // Intenta hacer un bucle en la reproducción del audio
@@ -587,7 +589,7 @@ void grabarResultadoCSV() {
     archivo.print(puntajeRavenclaw); // Escribimos el puntaje de Ravenclaw
     archivo.print(","); // Añadimos una coma como separador
     archivo.print(puntajeHufflepuff); // Escribimos el puntaje de Hufflepuff
-    archivo.print(","); // Añadimos una coma como separador
+    archivo.println(","); // Añadimos una coma como separador
     /*
     // Añadimos la fecha y hora
     archivo.print(now.year()); // Escribimos el año actual
