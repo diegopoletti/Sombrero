@@ -73,7 +73,7 @@ bool aleatoreaReproducida = false; // Bandera para verificar si se reprodujo una
 int preguntaActual = 1;                                                                                               // Índice de la pregunta actual
 const int totalPreguntas = 8;                                                                                         // Número total de preguntas
 const int puntosRespuesta = 10;                                                                                       // Puntuación fija para cada pregunta
-const char *archivosPreguntas[totalPreguntas] = {"q1.mp3", "q2.mp3", "q3.mp3", "q4.mp3", "q5.mp3", "q6.mp3", "q7.mp3", "q8.mp3"}; // Archivos de audio para las preguntas
+char *archivosPreguntas[totalPreguntas] = {"q1.mp3", "q2.mp3", "q3.mp3", "q4.mp3", "q5.mp3", "q6.mp3", "q7.mp3", "q8.mp3"}; // Archivos de audio para las preguntas
 const int TotalRespuestasAleatorias = 20;
 unsigned long ultimoUso = 0;                                                                                          // Variable para rastrear el último uso
 
@@ -90,7 +90,7 @@ int puntajeRavenclaw = 0; // Puntaje para Ravenclaw
 int puntajeHufflepuff = 0; // Puntaje para Hufflepuff
 
 // Arreglo de respuestas correctas (true para Sí, false para No)
-const bool respuestasCorrectas[totalPreguntas] = {true, false, true, false, true, false, true, false}; // Respuestas correctas para cada pregunta
+bool respuestasCorrectas[totalPreguntas] = {true, false, true, false, true, false, true, false}; // Respuestas correctas para cada pregunta
 /*Este arreglo tiene 8 elementos, uno para cada pregunta del juego (recordemos que totalPreguntas = 8).
 
 Ahora, veamos algunos ejemplos de cómo funciona esto en la práctica:
@@ -122,7 +122,7 @@ Si el jugador presiona el botón "Sí", no obtendrá puntos.
 En el código, cuando el jugador responde a una pregunta, se compara su respuesta con la respuesta correcta almacenada en respuestasCorrectas. Esto se hace en la función verificarRespuestaPulsadores():
 */
 // Arreglo de casas correspondientes a cada pregunta
-const int casasPorPregunta[totalPreguntas] = {0, 1, 2, 3, 0, 1, 2, 3}; // 0: Gryffindor, 1: Slytherin, 2: Ravenclaw, 3: Hufflepuff
+int casasPorPregunta[totalPreguntas] = {0, 1, 2, 3, 0, 1, 2, 3}; // 0: Gryffindor, 1: Slytherin, 2: Ravenclaw, 3: Hufflepuff
 
 // Arreglos para almacenar el orden aleatorio
 char* archivosPreguntas_aleatorio[totalPreguntas];
