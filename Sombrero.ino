@@ -1,4 +1,4 @@
-const char *version = "4.03"; // Versión del programa 
+const char *version = "4.04"; // Versión del programa 
 // Se realiza cambio a verificación por pulsadores estándar y se agregan servomotores
 // Se modifica el sistema de puntuación para ser más equitativo entre las casas
 // Se agrega modo picante y grabación de resultados en CSV
@@ -29,7 +29,7 @@ const char *password = ""; // Contraseña de la red WiFi
 // Pines para los pulsadores (ahora activos en bajo)
 #define PIN_SI 4  // GPIO 4 - Pin para "Sí"
 #define PIN_NO 15 // GPIO 15 - Pin para "No"
-#define PIN_PICANTE 9 // GPIO 9 - Pin para modo picante
+#define PIN_PICANTE 34 // GPIO 34 - Pin para modo picante
 
 // Pines para los servomotores
 #define PIN_SERVO_CUSPIDE 13 // Pin para el servomotor de la cúspide
@@ -51,7 +51,7 @@ const char *password = ""; // Contraseña de la red WiFi
 Servo servoCuspide; // Servo para la cúspide del sombrero
 Servo servoBoca;    // Servo para la boca del sombrero
 
-bool pulsadorPresionado = false; // Bandera para verificar si se presionó algún pulsador
+bool pulsadorPresionado = true; // Bandera para verificar si se presionó algún pulsador
 
 // Variables para el estado de los pulsadores y manejo del debounce
 bool pulsadorSiPresionado = false; // Variable para el estado del pulsador "Sí"
@@ -61,8 +61,6 @@ unsigned long ultimoTiempoSi = 0;  // Tiempo de la última lectura del pulsador 
 unsigned long ultimoTiempoNo = 0;  // Tiempo de la última lectura del pulsador "No"
 unsigned long ultimoTiempoPicante = 0; // Tiempo de la última lectura del pulsador "Picante"
 const unsigned long debounceDelay = 120; // Tiempo de espera para el debounce en milisegundos
-
-#define PWM_PIN 12 // GPIO 12 - Pin para la salida PWM
 
 // Variables para el manejo del audio
 AudioGeneratorMP3 *mp3;       // Generador de audio MP3
@@ -76,6 +74,7 @@ int preguntaActual = 1;                                                         
 const int totalPreguntas = 8;                                                                                         // Número total de preguntas
 const int puntosRespuesta = 10;                                                                                       // Puntuación fija para cada pregunta
 const char *archivosPreguntas[totalPreguntas] = {"q1.mp3", "q2.mp3", "q3.mp3", "q4.mp3", "q5.mp3", "q6.mp3", "q7.mp3", "q8.mp3"}; // Archivos de audio para las preguntas
+const int TotalRespuestasAleatorias = 20;
 unsigned long ultimoUso = 0;                                                                                          // Variable para rastrear el último uso
 
 // Variables para el control de los servomotores
@@ -132,7 +131,7 @@ int casasPorPregunta_aleatorio[totalPreguntas];
 
 // Variables para el modo picante
 bool modoPicanteActivado = false; // Bandera para indicar si el modo picante está activado
-const int totalArchivosPicantes = 10; // Número total de archivos picantes disponibles
+const int totalArchivosPicantes = 9; // Número total de archivos picantes disponibles
 const int archivosPicantesPorSesion = 3; // Número de archivos picantes a reproducir por sesión
 
 /**
@@ -153,7 +152,7 @@ void setup() {
   }
 
   randomSeed(analogRead(0)); // Inicializa la semilla aleatoria
-  reordenarPreguntas(); // Reordena las preguntas al inicio
+ // reordenarPreguntas(); // Reordena las preguntas al inicio
 
   // Configura los pines de los pulsadores como entradas con pull-up
   pinMode(PIN_SI, INPUT_PULLUP);
@@ -233,19 +232,19 @@ void loop() {
         if (preguntaActual <= totalPreguntas) {
           Serial.print("Llamado a pregunta: "); // Imprime el número de la pregunta actual
           Serial.println(preguntaActual);
-          reproducirPregunta(preguntaActual); // Reproduce la pregunta actual
+          reproducirPregunta(preguntaActual-1); // Reproduce la pregunta actual
           aleatoreaReproducida = false; // Reinicia la bandera de reproducción aleatoria
-        } else {
-          const char* archivoResultado = obtenerResultadoFinal(); // Obtiene el resultado final
-          Serial.print("Resultado final: "); // Imprime el resultado final
-          Serial.println(archivoResultado);
-          reproducirAudio(archivoResultado); // Reproduce el audio del resultado final
-          grabarResultadoCSV(); // Graba el resultado en el archivo CSV
+            } else {
+            const char* archivoResultado = obtenerResultadoFinal(); // Obtiene el resultado final
+            Serial.print("Resultado final: "); // Imprime el resultado final
+            Serial.println(archivoResultado);
+            reproducirAudio(archivoResultado); // Reproduce el audio del resultado final
+            grabarResultadoCSV(); // Graba el resultado en el archivo CSV
         }
-      } else {
+       } else {
         reproducirRespuestaAleatoria(); // Reproduce una respuesta aleatoria
-        aleatoreaReproducida = true; // Marca que se ha reproducido una respuesta aleatoria
-      } //fin elese
+        //aleatoreaReproducida = true; // Marca que se ha reproducido una respuesta aleatoria
+      } //fin elese aleatpria reproducida
     } // fin if pulsador presionado
   } // fin else
 } // fin loop
@@ -268,7 +267,7 @@ void reproducirIntroduccion() {
  } //fin re`producirIntroduccion
 void reproducirRespuestaAleatoria() {
   char ruta[15];
-  int numeroRespuesta = random(1, 22); // Genera un número aleatorio entre 1 y 22
+  int numeroRespuesta = random(1, TotalRespuestasAleatorias); // Genera un número aleatorio entre 1 y 22
   snprintf(ruta, sizeof(ruta), "/resp%d.mp3", numeroRespuesta); // Formatea la ruta del archivo de audio de la respuesta aleatoria
   Serial.print("Aleatorea: ");
   Serial.println(ruta);
@@ -279,12 +278,13 @@ void reproducirRespuestaAleatoria() {
 
 void reproducirPregunta(int numeroPregunta) {
   Serial.print("Pregunta a reproducir: "); // Imprime un mensaje en el monitor serial
-  Serial.println(numeroPregunta); // Imprime el número de la pregunta a reproducir
+  Serial.println(numeroPregunta +1); // Imprime el número de la pregunta a reproducir
   char ruta[15]; // Declara un arreglo de caracteres para almacenar la ruta del archivo
   snprintf(ruta, sizeof(ruta), "/%s", archivosPreguntas[numeroPregunta]); // Formatea la ruta del archivo de audio de la pregunta
   Serial.print("Ruta y archivo a reproducir: "); // Imprime un mensaje en el monitor serial sobre la ruta
   Serial.println(ruta); // Imprime la ruta del archivo que se va a reproducir
   reproducirAudio(ruta); // Llama a la función de reproducción de audio genérica con la ruta especificada
+
 }
 void verificarRespuestaPulsadores() {
   unsigned long tiempoActual = millis(); // Obtiene el tiempo actual
@@ -344,7 +344,8 @@ void reproducirAudio(const char *ruta) {
   }
 
   if (!fuente->open(ruta)) { // Abre el archivo de audio
-    Serial.println("Error al abrir el archivo"); // Mensaje de error si no se puede abrir el archivo
+    Serial.print("Error al abrir el archivo: "); // Mensaje de error si no se puede abrir el archivo
+    Serial.println(ruta);
     return; // Termina la función si no se puede abrir el archivo
   }
 
