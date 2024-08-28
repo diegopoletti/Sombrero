@@ -32,11 +32,11 @@ const char *password = ""; // Contraseña de la red WiFi
 
 // Pines para los servomotores
 #define PIN_SERVO_CUSPIDE 13 // Pin para el servomotor de la cúspide
-#define PIN_SERVO_BOCA 14    // Pin para el servomotor de la boca
+#define PIN_SERVO_BOCA 12    // Pin para el servomotor de la boca
 
 // Pines para LED RGB
-#define PIN_LED_ROJO 25    // Pin GPIO para el LED rojo
-#define PIN_LED_VERDE 26   // Pin GPIO para el LED verde
+#define PIN_LED_ROJO 33    // Pin GPIO para el LED rojo
+#define PIN_LED_VERDE 14   // Pin GPIO para el LED verde
 #define PIN_LED_AZUL 27    // Pin GPIO para el LED azul
 
 #define CANAL_LEDC_0 6     // Canal LEDC para el LED rojo
@@ -79,8 +79,8 @@ unsigned long ultimoUso = 0;                                                    
 // Variables para el control de los servomotores
 const int posicionCerrada = 0;
 const int posicionAbierta = 90;
-const int posicionReposo = 0;
-const int posicionInclinada = 90;
+const int posicionReposo = 0; // inicio de la posicion 
+const int posicionInclinada = 40;// inclinacon 
 unsigned long ultimoMovimientoCuspide = 0; // Último tiempo de movimiento de la cúspide
 unsigned long ultimoMovimientoBoca = 0;    // Último tiempo de movimiento de la boca
 const int intervaloMovimientoCuspide = 200; // Intervalo para el movimiento de la cúspide (en ms)
@@ -171,7 +171,7 @@ void setup() {
   servoCuspide.attach(PIN_SERVO_CUSPIDE, 500, 2400); // Conectar el servoCuspide al pin definido, con un rango de pulso de 500 a 2400 microsegundos
   servoBoca.attach(PIN_SERVO_BOCA, 500, 2400); // Conectar el servoBoca al pin definido, con un rango de pulso de 500 a 2400 microsegundos
 
- // configurarLED(); // Llama a la función para configurar el LED
+  configurarLED(); // Llama a la función para configurar el LED
 
   // Inicializa los componentes de audio
   mp3 = new AudioGeneratorMP3(); // Crea una nueva instancia del generador de audio MP3
@@ -256,6 +256,8 @@ void reproducirIntroduccion() {
   const char *archivoIntroduccion = "/intro.mp3"; // Ruta del archivo de introducción
   reproducirAudio(archivoIntroduccion); // Llama a la función de reproducción de audio genérica
   while (mp3->isRunning()) {
+         moverServoCuspide();
+         moverServoBoca();
     if (!mp3->loop() && yaReprodujo) { // Si el audio ha terminado de reproducirse
       yaReprodujo = false; // Reinicia la bandera de reproducción
       mp3->stop();         // Detiene la reproducción
@@ -442,7 +444,7 @@ const char *obtenerResultadoFinal() {
 
   // Manejar empates
   if (contadorEmpates >= 2) {
-    //LedPWM(128, 0, 128); // Color púrpura para Muggles
+    LedPWM(128, 0, 128); // Color púrpura para Muggles
     return "/muggle.mp3"; // Archivo de audio para Muggles
   } 
   // Si hay un empate entre dos casas
@@ -463,7 +465,8 @@ const char *obtenerResultadoFinal() {
       LedPWM(0, 0, 255); // Azul para Ravenclaw
       return "/ravenclaw.mp3"; // Retornar archivo de audio de Ravenclaw
     case 3:
-      LedPWM(255, 255, 0); // Amarillo para Hufflepuff
+      LedPWM(255, 255, 0); // A
+       para Hufflepuff
       return "/hufflepuff.mp3"; // Retornar archivo de audio de Hufflepuff
     default:
       LedPWM(0, 0, 0); // Apagar LED en caso de error
@@ -535,8 +538,8 @@ void moverServoCuspide() {
   unsigned long tiempoActual = millis(); // Captura el tiempo actual en milisegundos
   // Verifica si ha pasado el intervalo necesario desde el último movimiento
   if (tiempoActual - ultimoMovimientoCuspide >= intervaloMovimientoCuspide) {
-     int apertura = random(0, 50);  // Genera un número aleatorio entre 0 y 100
-    int posicion = map(apertura, 0, 50, posicionReposo, posicionInclinada);
+     int apertura = random(0, 1);  // Genera un número aleatorio entre 0 y 100
+    int posicion = map(apertura, 0, 1, posicionReposo, posicionInclinada);
     servoCuspide.write(posicion); // Mueve el servo a la posición generada
     ultimoMovimientoCuspide = tiempoActual; // Actualiza el tiempo del último movimiento
   }
@@ -549,8 +552,8 @@ void moverServoBoca() {
   unsigned long tiempoActual = millis(); // Captura el tiempo actual en milisegundos
   // Verifica si ha pasado el intervalo necesario desde el último movimiento
   if (tiempoActual - ultimoMovimientoBoca >= intervaloMovimientoBoca) {
-    int apertura = random(0, 20);  // Genera un número aleatorio entre 0 y 100
-    int posicion = map(apertura, 0, 20, posicionCerrada, posicionAbierta);
+    int apertura = random(0, 5);  // Genera un número aleatorio entre 0 y 100
+    int posicion = map(apertura, 0, 5, posicionCerrada, posicionAbierta);
     servoBoca.write(posicion); // Mueve el servo a la posición generada
     ultimoMovimientoBoca = tiempoActual; // Actualiza el tiempo del último movimiento
   }
