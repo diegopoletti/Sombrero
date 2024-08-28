@@ -2,7 +2,7 @@ const char *version = "4.04"; // Versión del programa
 // Se realiza cambio a verificación por pulsadores estándar y se agregan servomotores
 // Se modifica el sistema de puntuación para ser más equitativo entre las casas
 // Se agrega modo picante y grabación de resultados en CSV
-
+#include <ESP32Servo.h>          // Biblioteca para controlar servomotores en ESP32
 #include "AudioFileSourceSD.h"   // Biblioteca para fuente de audio desde la tarjeta SD
 #include "AudioGeneratorMP3.h"   // Biblioteca para generar audio MP3
 #include "AudioOutputI2SNoDAC.h" // Biblioteca para salida de audio sin DAC
@@ -11,7 +11,6 @@ const char *version = "4.04"; // Versión del programa
 #include "SPI.h"                 // Biblioteca para interfaz SPI
 #include <WiFi.h>                // Biblioteca para WiFi
 #include <ArduinoOTA.h>          // Biblioteca para actualizaciones OTA
-#include <ESP32Servo.h>          // Biblioteca para controlar servomotores en ESP32
 
 bool OTAhabilitado = false; // Variable para habilitar/deshabilitar OTA
 
@@ -40,9 +39,9 @@ const char *password = ""; // Contraseña de la red WiFi
 #define PIN_LED_VERDE 26   // Pin GPIO para el LED verde
 #define PIN_LED_AZUL 27    // Pin GPIO para el LED azul
 
-#define CANAL_LEDC_0 0     // Canal LEDC para el LED rojo
-#define CANAL_LEDC_1 1     // Canal LEDC para el LED verde
-#define CANAL_LEDC_2 2     // Canal LEDC para el LED azul
+#define CANAL_LEDC_0 6     // Canal LEDC para el LED rojo
+#define CANAL_LEDC_1 7     // Canal LEDC para el LED verde
+#define CANAL_LEDC_2 8     // Canal LEDC para el LED azul
 
 #define LEDC_TIMER_8_BIT 8 // Usar timer de 8 bits para PWM
 #define FRECUENCIA_BASE_LEDC 5000 // Frecuencia base para PWM en Hz
@@ -73,15 +72,19 @@ bool aleatoreaReproducida = false; // Bandera para verificar si se reprodujo una
 int preguntaActual = 1;                                                                                               // Índice de la pregunta actual
 const int totalPreguntas = 8;                                                                                         // Número total de preguntas
 const int puntosRespuesta = 10;                                                                                       // Puntuación fija para cada pregunta
-char *archivosPreguntas[totalPreguntas] = {"q1.mp3", "q2.mp3", "q3.mp3", "q4.mp3", "q5.mp3", "q6.mp3", "q7.mp3", "q8.mp3"}; // Archivos de audio para las preguntas
+const char *archivosPreguntas[totalPreguntas] = {"q1.mp3", "q2.mp3", "q3.mp3", "q4.mp3", "q5.mp3", "q6.mp3", "q7.mp3", "q8.mp3"}; // Archivos de audio para las preguntas
 const int TotalRespuestasAleatorias = 20;
 unsigned long ultimoUso = 0;                                                                                          // Variable para rastrear el último uso
 
 // Variables para el control de los servomotores
+const int posicionCerrada = 0;
+const int posicionAbierta = 90;
+const int posicionReposo = 0;
+const int posicionInclinada = 90;
 unsigned long ultimoMovimientoCuspide = 0; // Último tiempo de movimiento de la cúspide
 unsigned long ultimoMovimientoBoca = 0;    // Último tiempo de movimiento de la boca
-const int intervaloMovimientoCuspide = 500; // Intervalo para el movimiento de la cúspide (en ms)
-const int intervaloMovimientoBoca = 100;    // Intervalo para el movimiento de la boca (en ms)
+const int intervaloMovimientoCuspide = 200; // Intervalo para el movimiento de la cúspide (en ms)
+const int intervaloMovimientoBoca = 70;    // Intervalo para el movimiento de la boca (en ms)
 
 // Variables para el puntaje de cada casa
 int puntajeGryffindor = 0; // Puntaje para Gryffindor
@@ -90,7 +93,7 @@ int puntajeRavenclaw = 0; // Puntaje para Ravenclaw
 int puntajeHufflepuff = 0; // Puntaje para Hufflepuff
 
 // Arreglo de respuestas correctas (true para Sí, false para No)
-bool respuestasCorrectas[totalPreguntas] = {true, false, true, false, true, false, true, false}; // Respuestas correctas para cada pregunta
+const bool respuestasCorrectas[totalPreguntas] = {true, false, true, false, true, false, true, false}; // Respuestas correctas para cada pregunta
 /*Este arreglo tiene 8 elementos, uno para cada pregunta del juego (recordemos que totalPreguntas = 8).
 
 Ahora, veamos algunos ejemplos de cómo funciona esto en la práctica:
@@ -122,7 +125,7 @@ Si el jugador presiona el botón "Sí", no obtendrá puntos.
 En el código, cuando el jugador responde a una pregunta, se compara su respuesta con la respuesta correcta almacenada en respuestasCorrectas. Esto se hace en la función verificarRespuestaPulsadores():
 */
 // Arreglo de casas correspondientes a cada pregunta
-int casasPorPregunta[totalPreguntas] = {0, 1, 2, 3, 0, 1, 2, 3}; // 0: Gryffindor, 1: Slytherin, 2: Ravenclaw, 3: Hufflepuff
+const int casasPorPregunta[totalPreguntas] = {0, 1, 2, 3, 0, 1, 2, 3}; // 0: Gryffindor, 1: Slytherin, 2: Ravenclaw, 3: Hufflepuff
 
 // Arreglos para almacenar el orden aleatorio
 char* archivosPreguntas_aleatorio[totalPreguntas];
@@ -161,14 +164,14 @@ void setup() {
   
   // Configura los timers para los servomotores
 
-  ESP32PWM::allocateTimer(0); // Asignar el temporizador 0 para el control de PWM
-  ESP32PWM::allocateTimer(1); // Asignar el temporizador 1 para el control de PWM
-  servoCuspide.setPeriodHertz(50); // Establecer la frecuencia del servo en 50 Hz para el servoCuspide
-  servoBoca.setPeriodHertz(50); // Establecer la frecuencia del servo en 50 Hz para el servoBoca
+  //ESP32PWM::allocateTimer(0); // Asignar el temporizador 0 para el control de PWM
+ // ESP32PWM::allocateTimer(1); // Asignar el temporizador 1 para el control de PWM
+ // servoCuspide.setPeriodHertz(50); // Establecer la frecuencia del servo en 50 Hz para el servoCuspide
+  //servoBoca.setPeriodHertz(50); // Establecer la frecuencia del servo en 50 Hz para el servoBoca
   servoCuspide.attach(PIN_SERVO_CUSPIDE, 500, 2400); // Conectar el servoCuspide al pin definido, con un rango de pulso de 500 a 2400 microsegundos
   servoBoca.attach(PIN_SERVO_BOCA, 500, 2400); // Conectar el servoBoca al pin definido, con un rango de pulso de 500 a 2400 microsegundos
 
-  configurarLED(); // Llama a la función para configurar el LED
+ // configurarLED(); // Llama a la función para configurar el LED
 
   // Inicializa los componentes de audio
   mp3 = new AudioGeneratorMP3(); // Crea una nueva instancia del generador de audio MP3
@@ -206,7 +209,7 @@ void loop() {
       Serial.println("Audio Stop"); // Imprime en el monitor serie que el audio se detuvo
       Serial.println("Archivo Cerrado"); // Imprime que el archivo de audio se cerró
       servoCuspide.write(90); // Posición neutral para el servo de la cúspide
-      servoBoca.write(90); // Posición neutral para el servo de la boca
+      servoBoca.write(posicionCerrada); // Posición neutral para el servo de la boca
       yield(); // Cede el control para permitir otras tareas
     } else {
       moverServoCuspide(); // Mueve el servo de la cúspide
@@ -439,7 +442,7 @@ const char *obtenerResultadoFinal() {
 
   // Manejar empates
   if (contadorEmpates >= 2) {
-    LedPWM(128, 0, 128); // Color púrpura para Muggles
+    //LedPWM(128, 0, 128); // Color púrpura para Muggles
     return "/muggle.mp3"; // Archivo de audio para Muggles
   } 
   // Si hay un empate entre dos casas
@@ -479,6 +482,7 @@ void configurarLED() {
   ledcAttachPin(PIN_LED_ROJO, CANAL_LEDC_0); // Asocia el pin del LED rojo al canal 0
   ledcAttachPin(PIN_LED_VERDE, CANAL_LEDC_1); // Asocia el pin del LED verde al canal 1
   ledcAttachPin(PIN_LED_AZUL, CANAL_LEDC_2); // Asocia el pin del LED azul al canal 2
+
 }
 
 /**
@@ -531,7 +535,8 @@ void moverServoCuspide() {
   unsigned long tiempoActual = millis(); // Captura el tiempo actual en milisegundos
   // Verifica si ha pasado el intervalo necesario desde el último movimiento
   if (tiempoActual - ultimoMovimientoCuspide >= intervaloMovimientoCuspide) {
-    int posicion = random(70, 111); // Genera una posición aleatoria entre 70 y 110 grados
+     int apertura = random(0, 50);  // Genera un número aleatorio entre 0 y 100
+    int posicion = map(apertura, 0, 50, posicionReposo, posicionInclinada);
     servoCuspide.write(posicion); // Mueve el servo a la posición generada
     ultimoMovimientoCuspide = tiempoActual; // Actualiza el tiempo del último movimiento
   }
@@ -544,7 +549,8 @@ void moverServoBoca() {
   unsigned long tiempoActual = millis(); // Captura el tiempo actual en milisegundos
   // Verifica si ha pasado el intervalo necesario desde el último movimiento
   if (tiempoActual - ultimoMovimientoBoca >= intervaloMovimientoBoca) {
-    int posicion = random(80, 101); // Genera una posición aleatoria entre 80 y 100 grados
+    int apertura = random(0, 20);  // Genera un número aleatorio entre 0 y 100
+    int posicion = map(apertura, 0, 20, posicionCerrada, posicionAbierta);
     servoBoca.write(posicion); // Mueve el servo a la posición generada
     ultimoMovimientoBoca = tiempoActual; // Actualiza el tiempo del último movimiento
   }
