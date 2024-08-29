@@ -79,8 +79,8 @@ unsigned long ultimoUso = 0;                                                    
 // Variables para el control de los servomotores
 const int posicionCerrada = 0;
 const int posicionAbierta = 90;
-const int posicionReposo = 0; // inicio de la posicion 
-const int posicionInclinada = 40;// inclinacon 
+const int posicionReposo = 10; // inicio de la posicion 
+const int posicionInclinada = 5;// inclinacon 
 unsigned long ultimoMovimientoCuspide = 0; // Último tiempo de movimiento de la cúspide
 unsigned long ultimoMovimientoBoca = 0;    // Último tiempo de movimiento de la boca
 const int intervaloMovimientoCuspide = 200; // Intervalo para el movimiento de la cúspide (en ms)
@@ -465,8 +465,7 @@ const char *obtenerResultadoFinal() {
       LedPWM(0, 0, 255); // Azul para Ravenclaw
       return "/ravenclaw.mp3"; // Retornar archivo de audio de Ravenclaw
     case 3:
-      LedPWM(255, 255, 0); // A
-       para Hufflepuff
+      LedPWM(255, 255, 0); // A para Hufflepuff
       return "/hufflepuff.mp3"; // Retornar archivo de audio de Hufflepuff
     default:
       LedPWM(0, 0, 0); // Apagar LED en caso de error
