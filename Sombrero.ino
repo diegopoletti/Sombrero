@@ -77,10 +77,10 @@ const int TotalRespuestasAleatorias = 20;
 unsigned long ultimoUso = 0;                                                                                          // Variable para rastrear el último uso
 
 // Variables para el control de los servomotores
-const int posicionCerrada = 0;
-const int posicionAbierta = 90;
+const int posicionCerrada = 80;
+const int posicionAbierta = 0;
 const int posicionReposo = 10; // inicio de la posicion 
-const int posicionInclinada = 5;// inclinacon 
+const int posicionInclinada = 4;// inclinacon 
 unsigned long ultimoMovimientoCuspide = 0; // Último tiempo de movimiento de la cúspide
 unsigned long ultimoMovimientoBoca = 0;    // Último tiempo de movimiento de la boca
 const int intervaloMovimientoCuspide = 200; // Intervalo para el movimiento de la cúspide (en ms)
@@ -537,8 +537,8 @@ void moverServoCuspide() {
   unsigned long tiempoActual = millis(); // Captura el tiempo actual en milisegundos
   // Verifica si ha pasado el intervalo necesario desde el último movimiento
   if (tiempoActual - ultimoMovimientoCuspide >= intervaloMovimientoCuspide) {
-     int apertura = random(0, 1);  // Genera un número aleatorio entre 0 y 100
-    int posicion = map(apertura, 0, 1, posicionReposo, posicionInclinada);
+     int apertura = random(0, 3);  // Genera un número aleatorio entre 0 y 100
+    int posicion = map(apertura, 0, 3, posicionReposo, posicionInclinada);
     servoCuspide.write(posicion); // Mueve el servo a la posición generada
     ultimoMovimientoCuspide = tiempoActual; // Actualiza el tiempo del último movimiento
   }
@@ -551,8 +551,8 @@ void moverServoBoca() {
   unsigned long tiempoActual = millis(); // Captura el tiempo actual en milisegundos
   // Verifica si ha pasado el intervalo necesario desde el último movimiento
   if (tiempoActual - ultimoMovimientoBoca >= intervaloMovimientoBoca) {
-    int apertura = random(0, 5);  // Genera un número aleatorio entre 0 y 100
-    int posicion = map(apertura, 0, 5, posicionCerrada, posicionAbierta);
+    int apertura = random(0, 3);  // Genera un número aleatorio entre 0 y 100
+    int posicion = map(apertura, 0, 3, posicionCerrada, posicionAbierta);
     servoBoca.write(posicion); // Mueve el servo a la posición generada
     ultimoMovimientoBoca = tiempoActual; // Actualiza el tiempo del último movimiento
   }
